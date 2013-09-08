@@ -1,5 +1,29 @@
+// ============================================================================
+//        __
+//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//    \  __ /    All rights reserved.
+//     \/_//     robfinch<remove>@opencores.org
+//       ||
+//
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU Lesser General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or     
+// (at your option) any later version.                                      
+//                                                                          
+// This source file is distributed in the hope that it will be useful,      
+// but WITHOUT ANY WARRANTY; without even the implied warranty of           
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+// GNU General Public License for more details.                             
+//                                                                          
+// You should have received a copy of the GNU General Public License        
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+//                                                                          
+// ============================================================================
+//
 BYTE_JSL1:
 	if (ack_i) begin
+		state <= BYTE_JSL2;
+		retstate <= BYTE_JSL2;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -8,7 +32,10 @@ BYTE_JSL1:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_JSL2;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_JSL2:
 	begin
@@ -33,6 +60,8 @@ BYTE_JSL2:
 	end
 BYTE_JSL3:
 	if (ack_i) begin
+		state <= BYTE_JSL4;
+		retstate <= BYTE_JSL4;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -41,7 +70,10 @@ BYTE_JSL3:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_JSL4;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_JSL4:
 	begin
@@ -66,6 +98,8 @@ BYTE_JSL4:
 	end
 BYTE_JSL5:
 	if (ack_i) begin
+		state <= BYTE_JSL6;
+		retstate <= BYTE_JSL6;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -74,7 +108,10 @@ BYTE_JSL5:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_JSL6;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_JSL6:
 	begin
@@ -99,6 +136,8 @@ BYTE_JSL6:
 	end
 BYTE_JSL7:
 	if (ack_i) begin
+		state <= IFETCH;
+		retstate <= IFETCH;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -107,6 +146,9 @@ BYTE_JSL7:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 		pc <= ir[39:8];
-		state <= IFETCH;
 	end

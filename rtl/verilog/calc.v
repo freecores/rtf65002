@@ -1,3 +1,25 @@
+// ============================================================================
+//        __
+//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//    \  __ /    All rights reserved.
+//     \/_//     robfinch<remove>@opencores.org
+//       ||
+//
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU Lesser General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or     
+// (at your option) any later version.                                      
+//                                                                          
+// This source file is distributed in the hope that it will be useful,      
+// but WITHOUT ANY WARRANTY; without even the implied warranty of           
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+// GNU General Public License for more details.                             
+//                                                                          
+// You should have received a copy of the GNU General Public License        
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+//                                                                          
+// ============================================================================
+//
 CALC:
 	begin
 		state <= IFETCH;
@@ -27,6 +49,7 @@ CALC:
 		end
 		else begin
 			case(ir[7:0])
+/*			The following handled in the DECODE stage which reduces the CPI at a cost of clock frequency.
 			`RR:
 				case(ir[23:20])
 				`ADD_RR:	res <= a + b;
@@ -34,11 +57,11 @@ CALC:
 				`AND_RR:	res <= a & b;	// Also BIT
 				`OR_RR:		res <= a | b;
 				`EOR_RR:	res <= a ^ b;
-//				`MUL_RR:	prod <= a * b;	// slows the whole core down
-				endcase
+				`MUL_RR:	prod <= a * b;	// slows the whole core down
+				endcase*/
 			`ADD_IMM8,`ADD_IMM16,`ADD_IMM32,`ADD_ZPX,`ADD_IX,`ADD_IY,`ADD_ABS,`ADD_ABSX,`ADD_RIND:	begin res <= a + b;	end
 			`SUB_IMM8,`SUB_IMM16,`SUB_IMM32,`SUB_ZPX,`SUB_IX,`SUB_IY,`SUB_ABS,`SUB_ABSX,`SUB_RIND:	begin res <= a - b;	end // Also CMP
-			`AND_IMM8,`AND_IMM16,`AND_IMM32,`AND_ZPX,`AND_IX,`AND_IY,`AND_ABS,`AND_ABSX,`AND_RIND:	begin res <= a & b; $display("AND_ABS: %h", a & b); end	// Also BIT
+			`AND_IMM8,`AND_IMM16,`AND_IMM32,`AND_ZPX,`AND_IX,`AND_IY,`AND_ABS,`AND_ABSX,`AND_RIND:	begin res <= a & b; end	// Also BIT
 			`OR_IMM8,`OR_IMM16,`OR_IMM32,`OR_ZPX,`OR_IX,`OR_IY,`OR_ABS,`OR_ABSX,`OR_RIND:			begin res <= a | b; end	// Also LD
 			`EOR_IMM8,`EOR_IMM16,`EOR_IMM32,`EOR_ZPX,`EOR_IX,`EOR_IY,`EOR_ABS,`EOR_ABSX,`EOR_RIND:	begin res <= a ^ b; end
 			`LDX_ZPY,`LDX_ABS,`LDX_ABSY:	begin res <= b; end

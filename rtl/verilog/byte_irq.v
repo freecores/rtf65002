@@ -1,8 +1,32 @@
-// IRQ processing states
+// ============================================================================
+//        __
+//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//    \  __ /    All rights reserved.
+//     \/_//     robfinch<remove>@opencores.org
+//       ||
+//
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU Lesser General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or     
+// (at your option) any later version.                                      
+//                                                                          
+// This source file is distributed in the hope that it will be useful,      
+// but WITHOUT ANY WARRANTY; without even the implied warranty of           
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+// GNU General Public License for more details.                             
+//                                                                          
+// You should have received a copy of the GNU General Public License        
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+//                                                                          
+// ============================================================================
+//
+// IRQ processing states for 65C02 emulation mode
 // The high order PC[31:16] is set to zero, forcing the IRQ routine to be in bank zero.
 //
 BYTE_IRQ1:
 	if (ack_i) begin
+		state <= BYTE_IRQ2;
+		retstate <= BYTE_IRQ2;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -12,7 +36,10 @@ BYTE_IRQ1:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_IRQ2;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_IRQ2:
 	begin
@@ -36,6 +63,8 @@ BYTE_IRQ2:
 	end
 BYTE_IRQ3:
 	if (ack_i) begin
+		state <= BYTE_IRQ4;
+		retstate <= BYTE_IRQ4;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -45,7 +74,10 @@ BYTE_IRQ3:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_IRQ4;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_IRQ4:
 	begin
@@ -69,6 +101,8 @@ BYTE_IRQ4:
 	end
 BYTE_IRQ5:
 	if (ack_i) begin
+		state <= BYTE_IRQ6;
+		retstate <= BYTE_IRQ6;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -78,7 +112,10 @@ BYTE_IRQ5:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_IRQ6;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_IRQ6:
 	begin
@@ -102,6 +139,8 @@ BYTE_IRQ6:
 	end
 BYTE_IRQ7:
 	if (ack_i) begin
+		state <= BYTE_IRQ8;
+		retstate <= BYTE_IRQ8;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -111,7 +150,10 @@ BYTE_IRQ7:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_IRQ8;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_IRQ8:
 	begin
@@ -135,6 +177,8 @@ BYTE_IRQ8:
 	end
 BYTE_IRQ9:
 	if (ack_i) begin
+		state <= BYTE_JMP_IND1;
+		retstate <= BYTE_JMP_IND1;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -144,9 +188,12 @@ BYTE_IRQ9:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 		pc[31:16] <= 16'h0000;
 		radr <= vect[31:2];
 		radr2LSB <= vect[1:0];
-		state <= BYTE_JMP_IND1;
 	end
 	

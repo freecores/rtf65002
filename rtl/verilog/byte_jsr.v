@@ -1,5 +1,29 @@
+// ============================================================================
+//        __
+//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//    \  __ /    All rights reserved.
+//     \/_//     robfinch<remove>@opencores.org
+//       ||
+//
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU Lesser General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or     
+// (at your option) any later version.                                      
+//                                                                          
+// This source file is distributed in the hope that it will be useful,      
+// but WITHOUT ANY WARRANTY; without even the implied warranty of           
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+// GNU General Public License for more details.                             
+//                                                                          
+// You should have received a copy of the GNU General Public License        
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+//                                                                          
+// ============================================================================
+//
 BYTE_JSR1:
 	if (ack_i) begin
+		state <= BYTE_JSR2;
+		retstate <= BYTE_JSR2;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -8,7 +32,10 @@ BYTE_JSR1:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= BYTE_JSR2;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
 BYTE_JSR2:
 	begin
@@ -33,6 +60,8 @@ BYTE_JSR2:
 	end
 BYTE_JSR3:
 	if (ack_i) begin
+		state <= IFETCH;
+		retstate <= IFETCH;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -42,5 +71,8 @@ BYTE_JSR3:
 			wrsel <= sel_o;
 			wr <= 1'b1;
 		end
-		state <= IFETCH;
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
 	end
