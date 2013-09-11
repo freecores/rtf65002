@@ -76,14 +76,19 @@
 `define DEA			8'h3A
 
 `define RR			8'h02
-`define ADD_RR			4'h0
-`define SUB_RR			4'h1
-`define CMP_RR			4'h2
-`define AND_RR			4'h3
-`define EOR_RR			4'h4
-`define OR_RR			4'h5
-`define MUL_RR			4'h8
-
+`define ADD_RR			4'd0
+`define SUB_RR			4'd1
+`define CMP_RR			4'd2
+`define AND_RR			4'd3
+`define EOR_RR			4'd4
+`define OR_RR			4'd5
+`define MUL_RR			4'd8
+`define MULS_RR			4'd9
+`define DIV_RR			4'd10
+`define DIVS_RR			4'd11
+`define MOD_RR			4'd12
+`define MODS_RR			4'd13
+`define LD_RR		8'h7B
 
 `define ADD_IMM8	8'h65		// 8 bit operand
 `define ADD_IMM16	8'h79		// 16 bit operand
@@ -259,10 +264,12 @@
 `define ROR_ABS		8'h6E
 `define ROR_ABSX	8'h7E
 
+`define DEC_RR		8'hC6
 `define DEC_ZP		8'hC6
 `define DEC_ZPX		8'hD6
 `define DEC_ABS		8'hCE
 `define DEC_ABSX	8'hDE
+`define INC_RR		8'hE6
 `define INC_ZP		8'hE6
 `define INC_ZPX		8'hF6
 `define INC_ABS		8'hEE
@@ -602,6 +609,7 @@ assign v = (op ^ s ^ b) & (~op ^ a ^ b);
 
 endmodule
 
+
 module rtf65002d(rst_i, clk_i, nmi_i, irq_i, bte_o, cti_o, bl_o, lock_o, cyc_o, stb_o, ack_i, we_o, sel_o, adr_o, dat_i, dat_o);
 parameter IDLE = 3'd0;
 parameter LOAD_DCACHE = 3'd1;
@@ -708,6 +716,8 @@ parameter BYTE_PLA1 = 7'd97;
 parameter BYTE_PLA2 = 7'd98;
 parameter WAIT_DHIT = 7'd99;
 parameter RESET2 = 7'd100;
+parameter MULDIV1 = 7'd101;
+parameter MULDIV2 = 7'd102;
 
 input rst_i;
 input clk_i;
@@ -749,7 +759,9 @@ wire [7:0] acc8 = acc[7:0];
 wire [7:0] x8 = x[7:0];
 wire [7:0] y8 = y[7:0];
 reg [31:0] isp;		// interrupt stack pointer
-reg [63:0] prod;
+wire [63:0] prod;
+wire [31:0] q,r;
+reg [31:0] tick;
 wire [7:0] sp_dec = sp - 8'd1;
 wire [7:0] sp_inc = sp + 8'd1;
 wire [31:0] isp_dec = isp - 32'd1;
@@ -787,6 +799,9 @@ endcase
 reg [3:0] Rt;
 reg [33:0] ea;
 reg first_ifetch;
+reg [31:0] lfsr;
+wire lfsr_fb; 
+xnor(lfsr_fb,lfsr[0],lfsr[1],lfsr[21],lfsr[31]);
 reg [31:0] a, b;
 reg [7:0] b8;
 reg [32:0] res;
@@ -851,8 +866,26 @@ wire isRMW = em ? isRMW8 : isRMW32;
 wire isOrb = ir[7:0]==`ORB_ZPX || ir[7:0]==`ORB_IX || ir[7:0]==`ORB_IY || ir[7:0]==`ORB_ABS || ir[7:0]==`ORB_ABSX;
 wire isStb = ir[7:0]==`STB_ZPX || ir[7:0]==`STB_ABS || ir[7:0]==`STB_ABSX;
 
+wire ld_muldiv = state==DECODE && ir[7:0]==`RR;
+wire md_done;
+wire clk;
+
+mult_div umd1
+(
+	.rst(rst),
+	.clk(clk),
+	.ld(ld_muldiv),
+	.op(ir[23:20]),
+	.a(rfoa),
+	.b(rfob),
+	.p(prod),
+	.q(q),
+	.r(r),
+	.done(md_done)
+);
+
 icachemem icm0 (
-	.wclk(clk_i),
+	.wclk(clk),
 	.wr(ack_i & isInsnCacheLoad),
 	.adr(adr_o),
 	.dat(dat_i),
@@ -862,7 +895,7 @@ icachemem icm0 (
 );
 
 tagmem tgm0 (
-	.wclk(clk_i),
+	.wclk(clk),
 	.wr((ack_i & isInsnCacheLoad)|isCacheReset),
 	.adr({adr_o[31:1],!isCacheReset}),
 	.rclk(~clk_i),
@@ -874,7 +907,7 @@ tagmem tgm0 (
 wire ihit = (hit0 & hit1);//(pc[2:0] > 3'd1 ? hit1 : 1'b1));
 
 dcachemem dcm0 (
-	.wclk(clk_i),
+	.wclk(clk),
 	.wr(wr | (ack_i & isDataCacheLoad)),
 	.sel(wr ? wrsel : sel_o),
 	.wadr(wr ? wadr : adr_o[33:2]),
@@ -885,7 +918,7 @@ dcachemem dcm0 (
 );
 
 dtagmem dtm0 (
-	.wclk(clk_i),
+	.wclk(clk),
 	.wr(wr | (ack_i & isDataCacheLoad)),
 	.wadr(wr ? wadr : adr_o[33:2]),
 	.rclk(~clk_i),
@@ -974,7 +1007,6 @@ wire [31:0] absx32_address = ir[55:24] + rfob;
 //
 reg cpu_clk_en;
 reg clk_en;
-wire clk;
 BUFGCE u20 (.CE(cpu_clk_en), .I(clk_i), .O(clk) );
 
 always @(posedge clk_i)
@@ -1023,8 +1055,10 @@ if (rst_i) begin
 	clk_en <= 1'b1;
 	isCacheReset <= `TRUE;
 	gie <= 1'b0;
+	tick <= 32'd0;
 end
 else begin
+tick <= tick + 32'd1;
 wr <= 1'b0;
 if (nmi_i & !nmi1)
 	nmi_edge <= 1'b1;
@@ -1259,6 +1293,7 @@ IFETCH:
 								write_allocate <= res[2];
 								end
 						4'h1:	dp <= res;
+						4'h5:	lfsr <= res;
 						4'hE:	begin sp <= res[7:0]; end
 						4'hF:	begin isp <= res; gie <= 1'b1; end
 						endcase
@@ -1279,7 +1314,14 @@ IFETCH:
 					`OR_RR:	begin nf <= resn32; zf <= resz32; end
 					`EOR_RR:	begin nf <= resn32; zf <= resz32; end
 					`MUL_RR:	begin nf <= resn32; zf <= resz32; end
+					`MULS_RR:	begin nf <= resn32; zf <= resz32; end
+					`DIV_RR:	begin nf <= resn32; zf <= resz32; end
+					`DIVS_RR:	begin nf <= resn32; zf <= resz32; end
+					`MOD_RR:	begin nf <= resn32; zf <= resz32; end
+					`MODS_RR:	begin nf <= resn32; zf <= resz32; end
 					endcase
+				`LD_RR:	begin zf <= resz32; nf <= resn32; end
+				`DEC_RR,`INC_RR: begin zf <= resz32; nf <= resn32; end
 				`ASL_RR,`ROL_RR,`LSR_RR,`ROR_RR: begin cf <= resc32; nf <= resn32; zf <= resz32; end
 				`ADD_IMM8,`ADD_IMM16,`ADD_IMM32,`ADD_ZPX,`ADD_IX,`ADD_IY,`ADD_ABS,`ADD_ABSX,`ADD_RIND:
 					begin vf <= resv32; cf <= resc32; nf <= resn32; zf <= resz32; end
@@ -1907,6 +1949,8 @@ DECODE:
 						4'h1:	res <= dp;
 						4'h2:	res <= prod[31:0];
 						4'h3:	res <= prod[63:32];
+						4'h4:	res <= tick;
+						4'h5:	begin res <= lfsr; lfsr <= {lfsr[30:0],lfsr_fb}; end
 						4'hE:	res <= sp;
 						4'hF:	res <= isp;
 						endcase
@@ -1919,23 +1963,30 @@ DECODE:
 
 		`RR:
 			begin
+				state <= IFETCH;
 				case(ir[23:20])
 				`ADD_RR:	res <= rfoa + rfob;
 				`SUB_RR:	res <= rfoa - rfob;
 				`AND_RR:	res <= rfoa & rfob;
 				`OR_RR:		res <= rfoa | rfob;
 				`EOR_RR:	res <= rfoa ^ rfob;
-				`MUL_RR:	begin res <= rfoa * rfob; prod <= rfoa * rfob; end
+				`MUL_RR:	begin state <= MULDIV1; end
+				`MULS_RR:	begin state <= MULDIV1; end
+				`DIV_RR:	begin state <= MULDIV1; end
+				`DIVS_RR:	begin state <= MULDIV1; end
+				`MOD_RR:	begin state <= MULDIV1; end
+				`MODS_RR:	begin state <= MULDIV1; end
 				endcase
 				Rt <= ir[19:16];
 				pc <= pc + 32'd3;
-				state <= IFETCH;
 			end
-			
+		`LD_RR:		begin res <= rfoa; Rt <= ir[15:12]; pc <= pc + 32'd2; end
 		`ASL_RR:	begin res <= {rfoa,1'b0}; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 		`ROL_RR:	begin res <= {rfoa,cf}; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 		`LSR_RR:	begin res <= {rfoa[0],1'b0,rfoa[31:1]}; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 		`ROR_RR:	begin res <= {rfoa[0],cf,rfoa[31:1]}; pc <= pc + 32'd2; Rt <= ir[15:12]; end
+		`DEC_RR:	begin res <= rfoa - 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
+		`INC_RR:	begin res <= rfoa + 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 
 		`ADD_IMM8:	begin res <= rfoa + {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; end
 		`SUB_IMM8:	begin res <= rfoa - {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; end
@@ -2908,6 +2959,21 @@ JMP_IND2:
 		pc <= dat_i;
 		state <= IFETCH;
 	end
+MULDIV1:
+	state <= MULDIV2;
+MULDIV2:
+	if (md_done) begin
+		state <= IFETCH;
+		case(ir[23:20])
+		`MUL_RR:	begin res <= prod[31:0]; end
+		`MULS_RR:	begin res <= prod[31:0]; end
+		`DIV_RR:	begin res <= q; end
+		`DIVS_RR:	begin res <= q; end
+		`MOD_RR:	begin res <= r; end
+		`MODS_RR:	begin res <= r; end
+		endcase
+	end
+
 endcase
 
 `include "cache_controller.v"
