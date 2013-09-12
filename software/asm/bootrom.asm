@@ -43,6 +43,8 @@ TEXT_ROWS	EQU		0x1
 TEXT_CURPOS	EQU		11
 KEYBD		EQU		0xFFDC0000
 KEYBDCLR	EQU		0xFFDC0001
+PIC			EQU		0xFFDC0FF0
+PIC_IE		EQU		0xFFDC0FF1
 
 SPIMASTER	EQU		0xFFDC0500
 SPI_MASTER_VERSION_REG	EQU	0x00
@@ -71,10 +73,14 @@ SPI_TRANS_START		EQU		0x01
 SPI_TRANS_BUSY		EQU		0x01
 SPI_INIT_NO_ERROR	EQU		0x00
 SPI_READ_NO_ERROR	EQU		0x00
+SPI_WRITE_NO_ERROR	EQU		0x00
 RW_READ_SD_BLOCK	EQU		0x02
 RW_WRITE_SD_BLOCK	EQU		0x03
 
-BITMAPSCR	EQU		0x00200000
+BITMAPSCR	EQU		0x04000000
+SECTOR_BUF	EQU		0x05FFEC00
+BYTE_SECTOR_BUF	EQU	SECTOR_BUF<<2
+PROG_LOAD_AREA	EQU		0x4080000<<2
 
 macro m_lsr8
 lsr
@@ -87,34 +93,122 @@ lsr
 lsr
 endm
 
-CharColor	EQU		0x210
-ScreenColor	EQU		0x211
-CursorRow	EQU		0x212
-CursorCol	EQU		0x213
+macro m_asl8
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+endm
+
+; BIOS vars at the top of the 8kB scratch memory
+;
+
+CharColor	EQU		0x7C0
+ScreenColor	EQU		0x7C1
+CursorRow	EQU		0x7C2
+CursorCol	EQU		0x7C3
+CursorFlash	EQU		0x7C4
+Milliseconds	EQU		0x7C5
+
+KeybdHead	EQU		0x7D0
+KeybdTail	EQU		0x7D1
+KeybdEcho	EQU		0x7D2
+KeybdBad	EQU		0x7D3
+KeybdAck	EQU		0x7D4
+KeybdBuffer	EQU		0x7D5	; buffer is 16 chars
+KeybdLocks	EQU		0x7E5
+
+startSector	EQU		0x7F0
+
 
 	cpu		rtf65002
 	code
+
+	; jump table of popular BIOS routines
 	org		$FFFFC000
+	dw	DisplayChar
+	dw	KeybdCheckForKeyDirect
+	dw	KeybdGetCharDirect
+
+	org		$FFFFC200		; leave room for 128 vectors
+KeybdRST
 start
 	sei						; disable interrupts
 	cld						; disable decimal mode
-	ldx		#$1000			; setup stack pointer
+	ldx		#$05FFFFF8		; setup stack pointer top of memory
 	txs
+	trs		r0,dp			; set direct page register
+	trs		r0,dp8			; and 8 bit mode direct page
+	trs		r0,abs8			; and 8 bit mode absolute address offset
+
+	; setup interrupt vectors
+	ldx		#$05FFF000		; interrupt vector table from $5FFF000 to $5FFF1FF
+	trs		r2,vbr
+	lda		#brk_rout
+	sta		(x)
+	lda		#slp_rout
+	sta		1,x
+	lda		#KeybdRST
+	sta		448+1,x
+	lda		#p1000Hz
+	sta		448+2,x
+	lda		#p100Hz
+	sta		448+3,x
+	lda		#KeybdIRQ
+	sta		448+15,x
+
+	emm
+	cpu		W65C02
+	ldx		#$FF			; set 8 bit stack pointer
+	txs
+	nat
+	cpu		rtf65002
 	lda		#$CE			; CE =blue on blue FB = grey on grey
 	sta		ScreenColor
 	sta		CharColor
 	jsr		ClearScreen
+	jsr		ClearBmpScreen
 	stz		CursorRow
 	stz		CursorCol
-	lda		#msgStart>>2	; convert to data address
+	lda		#msgStart
 	jsr		DisplayStringB
-
+	jsr		KeybdInit
+	lda		#1
+	sta		KeybdEcho
+	jsr		PICInit
+	cli						; enable interrupts
+	jmp		Monitor
+st1
+	jsr		KeybdGetCharDirect
+	bra		st1
 	stp
 	bra		start
 	
-	align	4
 msgStart
 	db		"RTF65002 system starting.",$0d,$0a,00
+
+;----------------------------------------------------------
+; Initialize programmable interrupt controller (PIC)
+;  0 = nmi (parity error)
+;  1 = keyboard reset
+;  2 = 1000Hz pulse (context switcher)
+;  3 = 100Hz pulse (cursor flash)
+;  4 = ethmac
+;  8 = uart
+; 13 = raster interrupt
+; 15 = keyboard char
+;----------------------------------------------------------
+PICInit:
+	; enable: raster irq,
+	lda		#$000F			; enable nmi,kbd_rst,and kbd_irq
+	; A10F enable serial IRQ
+	sta		PIC_IE
+PICret:
+	rts
 
 ;------------------------------------------------------------------------------
 ; Clear the screen and the screen color memory
@@ -214,7 +308,7 @@ AsciiToScreen:
 	cmp		#'Z'
 	bcc		atoscr1
 	beq		atoscr1
-	cmp		#'z'
+	cmp		#'z'+1
 	bcs		atoscr1
 	cmp		#'a'
 	bcc		atoscr1
@@ -229,7 +323,7 @@ atoscr1:
 ;
 ScreenToAscii:
 	and		#$FF
-	cmp		#26
+	cmp		#26+1
 	bcs		stasc1
 	add		#$60
 stasc1:
@@ -414,38 +508,13 @@ DisplayStringB:
 	phx
 	tax						; r2 = pointer to string
 dspj1B:
-	lda		(x)				; move string char into acc
+	lb		r1,0,x			; move string char into acc
 	inx						; increment pointer
-	pha
-	and		#$FF
 	cmp		#0				; is it end of string ?
 	beq		dsretB
 	jsr		DisplayChar		; display character
-	pla
-	m_lsr8
-	pha
-	and		#$FF
-	cmp		#0
-	beq		dsretB
-	jsr		DisplayChar
-	pla
-	m_lsr8
-	pha
-	and		#$FF
-	cmp		#0
-	beq		dsretB
-	jsr		DisplayChar
-	pla
-	m_lsr8
-	pha
-	and		#$FF
-	cmp		#0
-	beq		dsretB
-	jsr		DisplayChar
-	pla
-	bra		dspj1B			; go back for next character
+	bra		dspj1B
 dsretB:
-	pla
 	plx
 	pla
 	rts
@@ -483,6 +552,231 @@ CRLF:
 	rts
 
 ;------------------------------------------------------------------------------
+; Initialize keyboard
+;
+; Issues a 'reset keyboard' command to the keyboard, then selects scan code
+; set #2 (the most common one). Also sets up the keyboard buffer and
+; initializes the keyboard semaphore.
+;------------------------------------------------------------------------------
+;
+KeybdInit:
+	lda		#1			; setup semaphore
+;	sta		KEYBD_SEMA
+	stz		KeybdHead		; setup keyboard buffer
+	stz		KeybdTail
+	lda		#1			; turn on keyboard echo
+	sta		KeybdEcho
+	stz		KeybdBad
+	
+	lda		#$ff		; issue keyboard reset
+	jsr		SendByteToKeybd
+	lda		#1000000		; delay a bit
+kbdi5:
+	dea
+	bne		kbdi5
+	lda		#0xf0		; send scan code select
+	jsr		SendByteToKeybd
+	ldx		#0xFA
+	jsr		WaitForKeybdAck
+	cmp		#$FA
+	bne		kbdi2
+	lda		#2			; select scan code set#2
+	jsr		SendByteToKeybd
+kbdi2:
+	rts
+
+msgBadKeybd:
+	db		"Keyboard not responding.",0
+
+SendByteToKeybd:
+	sta		KEYBD
+	tsr		TICK,r3
+kbdi4:						; wait for transmit complete
+	tsr		TICK,r4
+	sub		r4,r4,r3
+	cmp		r4,#1000000
+	bcs		kbdbad
+	lda		KEYBD+3
+	bit		#64
+	beq		kbdi4
+	bra		sbtk1
+kbdbad:
+	lda		KeybdBad
+	bne		sbtk1
+	lda		#1
+	sta		KeybdBad
+	lda		#msgBadKeybd
+	jsr		DisplayStringCRLFB
+sbtk1:
+	rts
+	
+; Wait for keyboard to respond with an ACK (FA)
+;
+WaitForKeybdAck:
+	tsr		TICK,r3
+wkbdack1:
+	tsr		TICK,r4
+	sub		r4,r4,r3
+	cmp		r4,#1000000
+	bcs		wkbdbad
+	lda		KEYBD
+	bit		#$8000
+	beq		wkbdack1
+;	lda		KEYBD+8
+	and		#$ff
+wkbdbad:
+	rts
+
+; Wait for keyboard to respond with an ACK (FA)
+; This routine picks up the ack status left by the
+; keyboard IRQ routine.
+; r2 = 0xFA (could also be 0xEE for echo command)
+;
+WaitForKeybdAck2:
+	lda		KeybdAck
+	cmp		r1,r2
+	bne		WaitForKeybdAck2
+	stz		KeybdAck
+	rts
+
+;------------------------------------------------------------------------------
+; Normal keyboard interrupt, the lowest priority interrupt in the system.
+; Grab the character from the keyboard device and store it in a buffer.
+; Doesn't use the stack.
+;------------------------------------------------------------------------------
+;
+KeybdIRQ:
+	pha
+	phx
+	phy
+	ldx		KEYBD				; get keyboard character
+	ld		r0,KEYBD+1			; clear keyboard strobe (turns off the IRQ)
+	txy							; check for a keyboard ACK code
+	and		r3,r3,#$ff
+	cmp		r3,#$FA
+	bne		KeybdIrq1
+	sty		KeybdAck
+	bra		KeybdIRQc
+KeybdIrq1:
+	bit		r2,#$800				; test bit #11
+	bne		KeybdIRQc				; ignore keyup messages for now
+	lda		KeybdHead			
+	ina								; increment head pointer
+	and		#$f						; limit
+	ldy		KeybdTail				; check for room in the keyboard buffer
+	cmp		r1,r3
+	beq		KeybdIRQc				; if no room, the newest char will be lost
+	sta		KeybdHead
+	dea
+	and		#$f
+	stx		KeybdBuffer,r1			; store character in buffer
+	stx		KeybdLocks
+KeybdIRQc:
+	ply
+	plx
+	pla
+	rti
+
+KeybdRstIRQ:
+	jmp		ColdStart
+
+;------------------------------------------------------------------------------
+; r1 0=echo off, non-zero = echo on
+;------------------------------------------------------------------------------
+SetKeyboardEcho:
+	sta		KeybdEcho
+	rts
+
+;-----------------------------------------
+; Get character from keyboard buffer
+; return character in acc or -1 if no
+; characters available
+;-----------------------------------------
+KeybdGetChar:
+	phx
+	ldx		KeybdTail	; if keybdTail==keybdHead then there are no 
+	lda		KeybdHead	; characters in the keyboard buffer
+	cmp		r1,r2
+	beq		nochar
+	lda		KeybdBuffer,x
+	and		r1,r1,#$ff		; mask off control bits
+	inx						; increment index
+	and		r2,r2,#$0f
+	stx		KeybdTail
+	ldx		KeybdEcho
+	beq		kgc3
+	cmp		#CR
+	bne		kgc2
+	jsr		CRLF			; convert CR keystroke into CRLF
+	bra		kgc3
+kgc2:
+	jsr		DisplayChar
+	bra		kgc3
+nochar:
+	lda		#-1
+kgc3:
+	plx
+	rts
+
+;------------------------------------------------------------------------------
+; Check if there is a keyboard character available in the keyboard buffer.
+;------------------------------------------------------------------------------
+;
+KeybdCheckForKey:
+	phx
+	lda		KeybdTail
+	ldx		KeybdHead
+	sub		r1,r1,r2
+	bne		kcfk1
+	plx
+	rts
+kcfk1
+	lda		#1
+	plx
+	rts
+message "668"
+;------------------------------------------------------------------------------
+; Check if there is a keyboard character available. If so return true (1)
+; otherwise return false (0) in r1.
+;------------------------------------------------------------------------------
+;
+KeybdCheckForKeyDirect:
+	lda		KEYBD
+	and		#$8000
+	beq		kcfkd1
+	lda		#1
+kcfkd1
+	rts
+
+;------------------------------------------------------------------------------
+; Get character directly from keyboard. This routine blocks until a key is
+; available.
+;------------------------------------------------------------------------------
+;
+KeybdGetCharDirect:
+	phx
+kgc1:
+	lda		KEYBD
+	bit		#$8000
+	beq		kgc1
+	ld		r0,KEYBD+1		; clear keyboard strobe
+	bit		#$800			; is it a keydown event ?
+	bne		kgc1
+	and		#$ff			; remove strobe bit
+	ldx		KeybdEcho		; is keyboard echo on ?
+	beq		gk1
+	cmp		#CR
+	bne		gk2				; convert CR keystroke into CRLF
+	jsr		CRLF
+	bra		gk1
+gk2:
+	jsr		DisplayChar
+gk1:
+	plx
+	rts
+
+
+;------------------------------------------------------------------------------
 ; Display nybble in r1
 ;------------------------------------------------------------------------------
 ;
@@ -490,7 +784,7 @@ DisplayNybble:
 	pha
 	and		#$0F
 	add		#'0'
-	cmp		#'9'
+	cmp		#'9'+1
 	bcc		dispnyb1
 	add		#7
 dispnyb1:
@@ -511,6 +805,367 @@ DisplayByte:
 	jsr		DisplayNybble
 	pla
 	jmp		DisplayNybble	; tail rts 
+message "785"
+;------------------------------------------------------------------------------
+; Display the half-word in r1
+;------------------------------------------------------------------------------
+;
+DisplayHalf:
+	pha
+	m_lsr8
+	jsr		DisplayByte
+	pla
+	jsr		DisplayByte
+	rts
+
+message "797"
+;------------------------------------------------------------------------------
+; Display the half-word in r1
+;------------------------------------------------------------------------------
+;
+DisplayWord:
+	pha
+	m_lsr8
+	m_lsr8
+	jsr		DisplayHalf
+	pla
+	jsr		DisplayHalf
+	rts
+message "810"
+;------------------------------------------------------------------------------
+; Display memory pointed to by r2.
+; destroys r1,r3
+;------------------------------------------------------------------------------
+;
+DisplayMemW:
+	pha
+	lda		#':'
+	jsr		DisplayChar
+	txa
+	jsr		DisplayWord
+	lda		#' '
+	jsr		DisplayChar
+	lda		(x)
+	jsr		DisplayWord
+	inx
+	lda		#' '
+	jsr		DisplayChar
+	lda		(x)
+	jsr		DisplayWord
+	inx
+	lda		#' '
+	jsr		DisplayChar
+	lda		(x)
+	jsr		DisplayWord
+	inx
+	lda		#' '
+	jsr		DisplayChar
+	lda		(x)
+	jsr		DisplayWord
+	inx
+	jsr		CRLF
+	pla
+	rts
+message "845"
+;==============================================================================
+; System Monitor Program
+;==============================================================================
+;
+Monitor:
+	ldx		#$1000			; top of stack; reset the stack pointer
+	txs
+	stz		KeybdEcho		; turn off keyboard echo
+PromptLn:
+	jsr		CRLF
+	lda		#'$'
+	jsr		DisplayChar
+
+; Get characters until a CR is keyed
+;
+Prompt3:
+;	lw		r1,#2			; get keyboard character
+;	syscall	#417
+	jsr		KeybdCheckForKeyDirect
+	cmp		#0
+	beq		Prompt3
+	jsr		KeybdGetCharDirect
+	cmp		#CR
+	beq		Prompt1
+	jsr		DisplayChar
+	bra		Prompt3
+
+; Process the screen line that the CR was keyed on
+;
+Prompt1:
+	stz		CursorCol		; go back to the start of the line
+	jsr		CalcScreenLoc	; r1 = screen memory location
+	tay
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	cmp		#'$'
+	bne		Prompt2			; skip over '$' prompt character
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+
+; Dispatch based on command character
+;
+Prompt2:
+	cmp		#':'
+	beq		EditMem
+	cmp		#'D'
+	beq		DumpMem
+	cmp		#'F'
+	beq		FillMem
+Prompt7:
+	cmp		#'B'			; $B - start tiny basic
+	bne		Prompt4
+	jsr		CSTART
+	bra		Monitor
+Prompt4:
+	cmp		#'b'
+	bne		Prompt5
+	emm
+	cpu		W65C02
+	jml		$0C000
+	cpu		rtf65002
+Prompt5:
+	cmp		#'J'			; $J - execute code
+	beq		ExecuteCode
+	cmp		#'L'			; $L - load S19 file
+	bne		Prompt9
+	jmp		LoadSector
+Prompt9:
+	cmp		#'?'			; $? - display help
+	bne		Prompt10
+	lda		#HelpMsg
+	jsr		DisplayStringB
+	jmp		Monitor
+Prompt10:
+	cmp		#'C'			; $C - clear screen
+	beq		TestCLS
+	cmp		#'R'
+	bne		Prompt12
+	jmp		RandomLinesCall
+Prompt12:
+Prompt13:
+	cmp		#'P'
+	bne		Prompt14
+	jmp		Piano
+Prompt14:
+	cmp		#'T'
+	bne		Prompt15
+	call	tmp_read
+Prompt15:
+	cmp		#'S'
+	bne		Prompt16
+	jsr		spi_init
+	cmp		#0
+	bne		Monitor
+	jsr		spi_read_part
+	cmp		#0
+	bne		Monitor
+	jsr		spi_read_boot
+	cmp		#0
+	bne		Monitor
+	jsr		loadBootFile
+	jmp		Monitor
+Prompt16:
+	jmp		Monitor
+message "Prompt16"
+RandomLinesCall:
+	jsr		RandomLines
+	jmp		Monitor
+
+TestCLS:
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	cmp		#'L'
+	bne		Monitor
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	cmp		#'S'
+	bne		Monitor
+	jsr 	ClearScreen
+	stz		CursorCol
+	stz		CursorRow
+	jsr		CalcScreenLoc
+	jmp		Monitor
+
+HelpMsg:
+	db	"? = Display help",CR,LF
+	db	"CLS = clear screen",CR,LF
+	db	"S = Boot from SD Card",CR,LF
+	db	": = Edit memory bytes",CR,LF
+	db	"L = Load S19 file",CR,LF
+	db	"D = Dump memory",CR,LF
+	db	"F = Fill memory",CR,LF
+	db	"B = start tiny basic",CR,LF
+	db	"b = start EhBasic 6502",CR,LF
+	db	"J = Jump to code",CR,LF
+	db	"R = Random lines",CR,LF
+	db	"T = get temperature",CR,LF
+	db	"P = Piano",CR,LF,0
+
+;------------------------------------------------------------------------------
+; Ignore blanks in the input
+; r3 = text pointer
+; r1 destroyed
+;------------------------------------------------------------------------------
+;
+ignBlanks:
+ignBlanks1:
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	cmp		#' '
+	beq		ignBlanks1
+	dey
+	rts
+
+;------------------------------------------------------------------------------
+; Edit memory byte(s).
+;------------------------------------------------------------------------------
+;
+EditMem:
+	jsr		ignBlanks
+	jsr		GetHexNumber
+	or		r5,r1,r0
+	ld		r4,#3
+edtmem1:
+	jsr		ignBlanks
+	jsr		GetHexNumber
+	sta		(r5)
+	add		r5,r5,#1
+	dec		r4
+	bne		edtmem1
+	jmp		Monitor
+
+;------------------------------------------------------------------------------
+; Execute code at the specified address.
+;------------------------------------------------------------------------------
+;
+ExecuteCode:
+	jsr		ignBlanks
+	jsr		GetHexNumber
+	jsr		(r1)
+	jmp     Monitor
+
+LoadSector:
+	jsr		ignBlanks
+	jsr		GetHexNumber
+	ld		r2,#0x3800
+	jsr		spi_read_sector
+	jmp		Monitor
+
+;------------------------------------------------------------------------------
+; Do a memory dump of the requested location.
+;------------------------------------------------------------------------------
+;
+DumpMem:
+	jsr		ignBlanks
+	jsr		GetHexNumber	; get start address of dump
+	tax
+	jsr		ignBlanks
+	jsr		GetHexNumber	; get number of words to dump
+	lsr						; 1/4 as many dump rows
+	lsr
+	bne		Dumpmem2
+	lda		#1				; dump at least one row
+Dumpmem2:
+	jsr		CRLF
+	bra		DumpmemW
+DumpmemW:
+	jsr		DisplayMemW
+	dea
+	bne		DumpmemW
+	jmp		Monitor
+
+
+	bra		Monitor
+
+FillMem:
+	jsr		ignBlanks
+	jsr		GetHexNumber	; get start address of dump
+	tax
+	jsr		ignBlanks
+	jsr		GetHexNumber	; get number of bytes to fill
+	or		r5,r1,r0
+	jsr		ignBlanks
+	jsr		GetHexNumber	; get the fill byte
+FillmemW:
+	sta		(x)
+	inx
+	dec		r5
+	bne		FillmemW
+	jmp		Monitor
+
+;------------------------------------------------------------------------------
+; Get a hexidecimal number. Maximum of eight digits.
+; R3 = text pointer (updated)
+; R1 = hex number
+;------------------------------------------------------------------------------
+;
+GetHexNumber:
+	phx
+	push	r4
+	ldx		#0
+	ld		r4,#8
+gthxn2:
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	jsr		AsciiToHexNybble
+	cmp		#-1
+	beq		gthxn1
+	asl		r2,r2
+	asl		r2,r2
+	asl		r2,r2
+	asl		r2,r2
+	and		#$0f
+	or		r2,r2,r1
+	dec		r4
+	bne		gthxn2
+gthxn1:
+	txa
+	pop		r4
+	plx
+	rts
+
+;------------------------------------------------------------------------------
+; Convert ASCII character in the range '0' to '9', 'a' to 'f' or 'A' to 'F'
+; to a hex nybble.
+;------------------------------------------------------------------------------
+;
+AsciiToHexNybble:
+	cmp		#'0'
+	bcc		gthx3
+	cmp		#'9'+1
+	bcs		gthx5
+	sub		#'0'
+	rts
+gthx5:
+	cmp		#'A'
+	bcc		gthx3
+	cmp		#'F'+1
+	bcs		gthx6
+	sub		#'A'
+	add		#10
+	rts
+gthx6:
+	cmp		#'a'
+	bcc		gthx3
+	cmp		#'z'+1
+	bcs		gthx3
+	sub		#'a'
+	add		#10
+	rts
+gthx3:
+	lda		#-1		; not a hex number
+	rts
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
@@ -521,11 +1176,11 @@ ClearBmpScreen:
 	ldx		#(1364*768)>>2		; x = # words to clear
 	lda		#0x29292929			; acc = color for four pixels
 	ldy		#BITMAPSCR			; y = screen address
-csj4
+cbsj4
 	sta		(y)					; store pixel data
 	iny							; advance screen address
 	dex							; decrement pixel count and loop back
-	bne		csj4
+	bne		cbsj4
 	ply
 	plx
 	pla
@@ -554,13 +1209,13 @@ spi_init1
 	and		#3
 	cmp		#SPI_INIT_NO_ERROR
 	bne		spi_error
-	lda		#spi_init_ok_msg>>2
+	lda		#spi_init_ok_msg
 	jsr		DisplayStringB
 	lda		#0
 	bra		spi_init_exit
 spi_error
 	jsr		DisplayByte
-	lda		#spi_init_error_msg>>2
+	lda		#spi_init_error_msg
 	jsr		DisplayStringB
 	lda		SPIMASTER+SPI_RESP_BYTE1
 	jsr		DisplayByte
@@ -624,17 +1279,17 @@ spi_read_sect1:
 	ldy		#512		; read 512 bytes from fifo
 spi_read_sect2:
 	lda		SPIMASTER+SPI_RX_FIFO_DATA_REG
-	sta		(x)
+	sb		r1,0,x
 	inx
 	dey
 	bne		spi_read_sect2
 	lda		#0
 	bra		spi_read_ret
 spi_read_error:
-	sub		r4,r4,#1
+	dec		r4
 	bne		spi_read_retry
 	jsr		DisplayByte
-	lda		#spi_read_error_msg>>2
+	lda		#spi_read_error_msg
 	jsr		DisplayStringB
 	lda		#1
 spi_read_ret:
@@ -664,7 +1319,7 @@ spi_write_sector:
 	; now fill up the transmitter fifo
 	ldy		#512
 spi_write_sect1:
-	lda		(x)
+	lb		r1,0,x
 	sta		SPIMASTER+SPI_TX_FIFO_DATA_REG
 	nop			; give the I/O time to respond
 	nop
@@ -706,7 +1361,7 @@ spi_write_sect2:
 	bra		spi_write_ret
 spi_write_error:
 	jsr		DisplayByte
-	lda		#spi_write_error_msg>>2
+	lda		#spi_write_error_msg
 	jsr		DisplayStringB
 	lda		#1
 
@@ -715,30 +1370,219 @@ spi_write_ret:
 	plx
 	rts
 
-	align	4
+; read the partition table to find out where the boot sector is.
+;
+spi_read_part:
+	phx
+	stz		startSector						; default starting sector
+	lda		#0								; r1 = sector number (#0)
+	ldx		#SECTOR_BUF<<2					; r2 = target address (word to byte address)
+	jsr		spi_read_sector
+	lb		r1,BYTE_SECTOR_BUF+$1C9
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$1C8
+	asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+
+	orb		r1,r1,BYTE_SECTOR_BUF+$1C7
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$1C6
+	sta		startSector						; r1 = 0, for okay status
+	lda		#0
+	plx
+	rts
+
+; Read the boot sector from the disk.
+; Make sure it's the boot sector by looking for the signature bytes 'EB' and '55AA'.
+;
+spi_read_boot:
+	phx
+	phy
+	push	r5
+	lda		startSector					; r1 = sector number
+	ldx		#BYTE_SECTOR_BUF			; r2 = target address
+	jsr		spi_read_sector
+	lb		r1,BYTE_SECTOR_BUF
+	cmp		#$EB
+	beq		spi_read_boot2
+spi_read_boot3:
+	lda		#1							; r1 = 1 for error
+	bra		spi_read_boot4
+spi_read_boot2:
+	lda		#msgFoundEB
+	jsr		DisplayStringB
+	lb		r1,BYTE_SECTOR_BUF+$1FE		; check for 0x55AA signature
+	cmp		#$55
+	bne		spi_read_boot3
+	lb		r1,BYTE_SECTOR_BUF+$1FF		; check for 0x55AA signature
+	cmp		#$AA
+	bne		spi_read_boot3
+	lda		#0						; r1 = 0, for okay status
+spi_read_boot4:
+	pop		r5
+	ply
+	plx
+	rts
+
+msgFoundEB:
+	db	"Found EB code.",CR,LF,0
+
+
+; Load the root directory from disk
+; r2 = where to place root directory in memory
+;
+loadBootFile:
+	lb		r1,BYTE_SECTOR_BUF+$17			; sectors per FAT
+	m_asl8
+	orb		r1,r1,BYTE_SECTOR_BUF+$16
+	bne		loadBootFile7
+	lb		r1,BYTE_SECTOR_BUF+$27			; sectors per FAT, FAT32
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$26
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$25
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$24
+loadBootFile7:
+	lb		r4,BYTE_SECTOR_BUF+$10			; number of FATs
+	mul		r3,r1,r4						; offset
+	lb		r1,BYTE_SECTOR_BUF+$F			; r1 = # reserved sectors before FAT
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+asl
+	orb		r1,r1,BYTE_SECTOR_BUF+$E
+	add		r3,r3,r1						; r3 = root directory sector number
+	ld		r6,startSector
+	add		r5,r3,r6						; r5 = root directory sector number
+	lb		r1,BYTE_SECTOR_BUF+$D			; sectors per cluster
+	add		r3,r1,r5						; r3 = first cluster after first cluster of directory
+	bra		loadBootFile6
+
+loadBootFile6:
+	; For now we cheat and just go directly to sector 512.
+	bra		loadBootFileTmp
+
+loadBootFileTmp:
+	; We load the number of sectors per cluster, then load a single cluster of the file.
+	; This is 16kib
+	ld		r5,r3							; r5 = start sector of data area	
+	ld		r2,#PROG_LOAD_AREA				; where to place file in memory
+	lb		r3,BYTE_SECTOR_BUF+$D			; sectors per cluster
+loadBootFile1:
+	ld		r1,r5							; r1=sector to read
+	jsr		spi_read_sector
+	inc		r5						; r5 = next sector
+	add		r2,r2,#512
+	dec		r3
+	bne		loadBootFile1
+	lda		(PROG_LOAD_AREA>>2)+$80	; make sure it's bootable
+	cmp		#$544F4F42
+	bne		loadBootFile2
+	lda		#msgJumpingToBoot
+	jsr		DisplayStringB
+	lda		(PROG_LOAD_AREA>>2)+$81
+	jsr		(r1)
+	jmp		Monitor
+loadBootFile2:
+	lda		#msgNotBootable
+	jsr		DisplayStringB
+	ldx		#PROG_LOAD_AREA>>2
+	jsr		DisplayMemW
+	jsr		DisplayMemW
+	jsr		DisplayMemW
+	jsr		DisplayMemW
+	jmp		Monitor
+
 msgJumpingToBoot:
 	db	"Jumping to boot",0	
-	align	4
 msgNotBootable:
 	db	"SD card not bootable.",0
-	align	4
 spi_init_ok_msg:
 	db "SD card initialized okay.",0
-	align	4
 spi_init_error_msg:
 	db	": error occurred initializing the SD card.",0
-	align	4
 spi_boot_error_msg:
 	db	"SD card boot error",0
-	align	4
 spi_read_error_msg:
 	db	"SD card read error",0
-	align	4
 spi_write_error_msg:
 	db	"SD card write error",0
 
+;------------------------------------------------------------------------------
+; 100 Hz interrupt
+; - takes care of "flashing" the cursor
+;------------------------------------------------------------------------------
+;
+p100Hz:
+	inc		TEXTSCR+83
+	stz		0xFFDCFFFC		; clear interrupt
+	rti
+
+;------------------------------------------------------------------------------
+; 1000 Hz interrupt
+; This IRQ must be fast.
+; Increments the millisecond counter, and switches to the next context
+;------------------------------------------------------------------------------
+;
+p1000Hz:
+	stz		0xFFDCFFFD				; acknowledge interrupt
+	inc		Milliseconds			; increment milliseconds count
+	rti
+
+slp_rout:
+	rti
+brk_rout:
+	rti
 nmirout
 	rti
+message "1298"
+include "TinyBasic65002.asm"
 
 	org $0FFFFFFF4		; NMI vector
 	dw	nmirout
