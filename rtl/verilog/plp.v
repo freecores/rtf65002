@@ -48,6 +48,7 @@ PLP2:
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
+		adr_o <= 34'd0;
 		cf <= dat_i[0];
 		zf <= dat_i[1];
 		im <= dat_i[2];

@@ -62,9 +62,9 @@
 //	|									SLAVE,BLOCK READ/WRITE
 //	|									SLAVE,RMW
 //	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//	|Data port, size:					16 bit
-//	|Data port, granularity:			16 bit
-//	|Data port, maximum operand size:	16 bit
+//	|Data port, size:					32 bit
+//	|Data port, granularity:			32 bit
+//	|Data port, maximum operand size:	32 bit
 //	|Data transfer ordering:			Undefined
 //	|Data transfer sequencing:			Undefined
 //	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -39,7 +39,7 @@ BYTE_RTI9:
 		vf <= rdat8[6];
 		nf <= rdat8[7];
 		sp <= sp_inc;
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		state <= BYTE_RTI1;
 	end
@@ -58,7 +58,7 @@ BYTE_RTI10:
 		vf <= dati[6];
 		nf <= dati[7];
 		sp <= sp_inc;
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		state <= BYTE_RTI1;
 	end
@@ -71,7 +71,7 @@ BYTE_RTI1:
 		state <= RTI2;
 	end
 	else if (dhit) begin
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[7:0] <= rdat8;
@@ -85,7 +85,7 @@ BYTE_RTI2:
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[7:0] <= dati;
@@ -100,7 +100,7 @@ BYTE_RTI3:
 		state <= BYTE_RTI4;
 	end
 	else if (dhit) begin
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[15:8] <= rdat8;
@@ -114,7 +114,7 @@ BYTE_RTI4:
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[15:8] <= dati;
@@ -129,7 +129,7 @@ BYTE_RTI5:
 		state <= BYTE_RTI6;
 	end
 	else if (dhit) begin
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[23:16] <= rdat8;
@@ -143,7 +143,7 @@ BYTE_RTI6:
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
-		radr <= {24'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[23:16] <= dati;

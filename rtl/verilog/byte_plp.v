@@ -45,6 +45,7 @@ BYTE_PLP2:
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
+		adr_o <= 34'd0;
 		cf <= dati[0];
 		zf <= dati[1];
 		im <= dati[2];

@@ -31,7 +31,7 @@ BYTE_RTS1:
 		state <= BYTE_RTS2;
 	end
 	else if (dhit) begin
-		radr <= {26'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[7:0] <= rdat8;
@@ -45,7 +45,7 @@ BYTE_RTS2:
 		stb_o <= 1'b0;
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
-		radr <= {26'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		pc[7:0] <= dati;
@@ -61,7 +61,7 @@ BYTE_RTS3:
 	end
 	else if (dhit) begin
 		if (ir[7:0]==`RTL) begin
-			radr <= {26'h1,sp_inc[7:2]};
+			radr <= {spage[31:8],sp_inc[7:2]};
 			radr2LSB <= sp_inc[1:0];
 			sp <= sp_inc;
 		end
@@ -78,7 +78,7 @@ BYTE_RTS4:
 		adr_o <= 34'h0;
 		pc[15:8] <= dati;
 		if (ir[7:0]==`RTL) begin
-			radr <= {26'h1,sp_inc[7:2]};
+			radr <= {spage[31:8],sp_inc[7:2]};
 			radr2LSB <= sp_inc[1:0];
 			sp <= sp_inc;
 		end
@@ -98,7 +98,7 @@ BYTE_RTS5:
 			state <= BYTE_RTS6;
 		end
 		else if (dhit) begin
-			radr <= {26'h1,sp_inc[7:2]};
+			radr <= {spage[31:8],sp_inc[7:2]};
 			radr2LSB <= sp_inc[1:0];
 			sp <= sp_inc;
 			pc[23:16] <= rdat8;
@@ -114,7 +114,7 @@ BYTE_RTS6:
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
 		pc[23:16] <= dati;
-		radr <= {26'h1,sp_inc[7:2]};
+		radr <= {spage[31:8],sp_inc[7:2]};
 		radr2LSB <= sp_inc[1:0];
 		sp <= sp_inc;
 		state <= BYTE_RTS7;

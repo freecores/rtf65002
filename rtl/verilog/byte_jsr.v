@@ -39,8 +39,8 @@ BYTE_JSR1:
 	end
 BYTE_JSR2:
 	begin
-		radr <= {24'h1,sp[7:2]};
-		wadr <= {24'h1,sp[7:2]};
+		radr <= {spage[31:8],sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
 		radr2LSB <= sp[1:0];
 		wadr2LSB <= sp[1:0];
 		wdat <= {4{pcp2[7:0]}};
@@ -53,7 +53,7 @@ BYTE_JSR2:
 		2'd2:	sel_o <= 4'b0100;
 		2'd3:	sel_o <= 4'b1000;
 		endcase
-		adr_o <= {24'h1,sp[7:2],2'b00};
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
 		dat_o <= {4{pcp2[7:0]}};
 		sp <= sp_dec;
 		state <= BYTE_JSR3;

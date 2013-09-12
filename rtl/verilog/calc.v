@@ -43,8 +43,8 @@ CALC:
 			`ROL_ZP,`ROL_ZPX,`ROL_ABS,`ROL_ABSX:	begin res8 <= {b8,cf}; wdat <= {4{b8[6:0],cf}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
 			`LSR_ZP,`LSR_ZPX,`LSR_ABS,`LSR_ABSX:	begin res8 <= {b8[0],1'b0,b8[7:1]}; wdat <= {4{1'b0,b8[7:1]}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
 			`ROR_ZP,`ROR_ZPX,`ROR_ABS,`ROR_ABSX:	begin res8 <= {b8[0],cf,b8[7:1]}; wdat <= {4{cf,b8[7:1]}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
-			`INC_ZP,`INC_ZPX,`INC_ABS,`INC_ABSX:	begin res8 <= b8 + 1; wdat <= {4{b8+8'd1}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
-			`DEC_ZP,`DEC_ZPX,`DEC_ABS,`DEC_ABSX:	begin res8 <= b8 - 1; wdat <= {4{b8-8'd1}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
+			`INC_ZP,`INC_ZPX,`INC_ABS,`INC_ABSX:	begin res8 <= b8 + 8'd1; wdat <= {4{b8+8'd1}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
+			`DEC_ZP,`DEC_ZPX,`DEC_ABS,`DEC_ABSX:	begin res8 <= b8 - 8'd1; wdat <= {4{b8-8'd1}}; wadr <= radr; wadr2LSB <= radr2LSB; state <= STORE1; end
 			endcase
 		end
 		else begin

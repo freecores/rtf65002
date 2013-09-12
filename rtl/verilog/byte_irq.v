@@ -43,9 +43,9 @@ BYTE_IRQ1:
 	end
 BYTE_IRQ2:
 	begin
-		radr <= {24'h1,sp[7:2]};
+		radr <= {spage[31:8],sp[7:2]};
 		radr2LSB <= sp[1:0];
-		wadr <= {24'h1,sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
 		wadr2LSB <= sp[1:0];
 		wdat <= {4{pc[23:16]}};
 		cyc_o <= 1'b1;
@@ -57,7 +57,7 @@ BYTE_IRQ2:
 		2'd2:	sel_o <= 4'b0100;
 		2'd3:	sel_o <= 4'b1000;
 		endcase
-		adr_o <= {24'h1,sp[7:2],2'b00};
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
 		dat_o <= {4{pc[23:16]}};
 		state <= BYTE_IRQ3;
 	end
@@ -81,9 +81,9 @@ BYTE_IRQ3:
 	end
 BYTE_IRQ4:
 	begin
-		radr <= {24'h1,sp[7:2]};
+		radr <= {spage[31:8],sp[7:2]};
 		radr2LSB <= sp[1:0];
-		wadr <= {24'h1,sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
 		wadr2LSB <= sp[1:0];
 		wdat <= {4{pc[15:8]}};
 		cyc_o <= 1'b1;
@@ -95,7 +95,7 @@ BYTE_IRQ4:
 		2'd2:	sel_o <= 4'b0100;
 		2'd3:	sel_o <= 4'b1000;
 		endcase
-		adr_o <= {24'h1,sp[7:2],2'b00};
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
 		dat_o <= {4{pc[15:8]}};
 		state <= BYTE_IRQ5;
 	end
@@ -119,9 +119,9 @@ BYTE_IRQ5:
 	end
 BYTE_IRQ6:
 	begin
-		radr <= {24'h1,sp[7:2]};
+		radr <= {spage[31:8],sp[7:2]};
 		radr2LSB <= sp[1:0];
-		wadr <= {24'h1,sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
 		wadr2LSB <= sp[1:0];
 		wdat <= {4{pc[7:0]}};
 		cyc_o <= 1'b1;
@@ -133,7 +133,7 @@ BYTE_IRQ6:
 		2'd2:	sel_o <= 4'b0100;
 		2'd3:	sel_o <= 4'b1000;
 		endcase
-		adr_o <= {24'h1,sp[7:2],2'b00};
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
 		dat_o <= {4{pc[7:0]}};
 		state <= BYTE_IRQ7;
 	end
@@ -157,9 +157,9 @@ BYTE_IRQ7:
 	end
 BYTE_IRQ8:
 	begin
-		radr <= {24'h1,sp[7:2]};
+		radr <= {spage[31:8],sp[7:2]};
 		radr2LSB <= sp[1:0];
-		wadr <= {24'h1,sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
 		wadr2LSB <= sp[1:0];
 		wdat <= {4{sr8[7:0]}};
 		cyc_o <= 1'b1;
@@ -171,7 +171,7 @@ BYTE_IRQ8:
 		2'd2:	sel_o <= 4'b0100;
 		2'd3:	sel_o <= 4'b1000;
 		endcase
-		adr_o <= {24'h1,sp[7:2],2'b00};
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
 		dat_o <= {4{sr8[7:0]}};
 		state <= BYTE_IRQ9;
 	end
