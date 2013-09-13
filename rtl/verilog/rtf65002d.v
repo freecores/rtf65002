@@ -88,6 +88,8 @@
 `define DIVS_RR			4'd11
 `define MOD_RR			4'd12
 `define MODS_RR			4'd13
+`define ASL_RRR			4'd14
+`define LSR_RRR			4'd15
 `define LD_RR		8'h7B
 
 `define ADD_IMM8	8'h65		// 8 bit operand
@@ -132,6 +134,7 @@
 `define SBC_ABSY	8'hF9
 `define SBC_I		8'hF2
 
+`define CMP_IMM8	8'hC5
 `define CMP_IMM32	8'hC9
 `define CMP_IMM		8'hC9
 `define CMP_ZP		8'hC5
@@ -237,6 +240,7 @@
 `define STA_ABSY	8'h99
 `define STA_I		8'h92
 
+`define ASL_IMM8	8'h24
 `define ASL_ACC		8'h0A
 `define ASL_ZP		8'h06
 `define ASL_RR		8'h06
@@ -251,6 +255,7 @@
 `define ROL_ABS		8'h2E
 `define ROL_ABSX	8'h3E
 
+`define LSR_IMM8	8'h34
 `define LSR_ACC		8'h4A
 `define LSR_ZP		8'h46
 `define LSR_RR		8'h46
@@ -808,6 +813,8 @@ reg [31:0] lfsr;
 wire lfsr_fb; 
 xnor(lfsr_fb,lfsr[0],lfsr[1],lfsr[21],lfsr[31]);
 reg [31:0] a, b;
+wire [31:0] shlo = a << b[4:0];
+wire [31:0] shro = a >> b[4:0];
 reg [7:0] b8;
 reg [32:0] res;
 reg [8:0] res8;
@@ -1286,7 +1293,6 @@ IFETCH:
 				default:	;
 				endcase
 				case(ir[7:0])
-//				`XCE:		begin cf <= em; em <= cf; end
 				`EMM:	em <= 1'b1;
 				`TAY,`TXY,`DEY,`INY:	begin y <= res; nf <= resn32; zf <= resz32; end
 				`TAX,`TYX,`TSX,`DEX,`INX:	begin x <= res; nf <= resn32; zf <= resz32; end
@@ -1305,7 +1311,7 @@ IFETCH:
 						4'h5:	lfsr <= res;
 						4'h6:	dp8 <= res;
 						4'h7:	abs8 <= res;
-						4'h8:	vbr <= {res[31:9],9'h000};
+						4'h8:	begin vbr <= {res[31:9],9'h000}; nmoi <= res[0]; end
 						4'hE:	begin sp <= res[7:0]; spage[31:8] <= res[31:8]; end
 						4'hF:	begin isp <= res; gie <= 1'b1; end
 						endcase
@@ -1331,6 +1337,8 @@ IFETCH:
 					`DIVS_RR:	begin nf <= resn32; zf <= resz32; end
 					`MOD_RR:	begin nf <= resn32; zf <= resz32; end
 					`MODS_RR:	begin nf <= resn32; zf <= resz32; end
+					`ASL_RRR:	begin nf <= resn32; zf <= resz32; end
+					`LSR_RRR:	begin nf <= resn32; zf <= resz32; end
 					endcase
 				`LD_RR:	begin zf <= resz32; nf <= resn32; end
 				`DEC_RR,`INC_RR: begin zf <= resz32; nf <= resn32; end
@@ -1359,6 +1367,8 @@ IFETCH:
 				`ROL_ZPX,`ROL_ABS,`ROL_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
 				`LSR_ZPX,`LSR_ABS,`LSR_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
 				`ROR_ZPX,`ROR_ABS,`ROR_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
+				`ASL_IMM8: begin nf <= resn32; zf <= resz32; end
+				`LSR_IMM8: begin nf <= resn32; zf <= resz32; end
 				`INC_ZPX,`INC_ABS,`INC_ABSX: begin nf <= resn32; zf <= resz32; end
 				`DEC_ZPX,`DEC_ABS,`DEC_ABSX: begin nf <= resn32; zf <= resz32; end
 				`PLA:	begin acc <= res; zf <= resz32; nf <= resn32; end
@@ -1366,8 +1376,9 @@ IFETCH:
 				`PLY:	begin y <= res; zf <= resz32; nf <= resn32; end
 				`LDX_IMM32,`LDX_IMM16,`LDX_IMM8,`LDX_ZPY,`LDX_ABS,`LDX_ABSY:	begin x <= res; nf <= resn32; zf <= resz32; end
 				`LDY_IMM32,`LDY_ZPX,`LDY_ABS,`LDY_ABSX:	begin y <= res; nf <= resn32; zf <= resz32; end
-				`CPX_IMM32,`CPX_ZPX,`CPX_ABS:	begin cf <= ~resc; nf <= resn32; zf <= resz32; end
-				`CPY_IMM32,`CPY_ZPX,`CPY_ABS:	begin cf <= ~resc; nf <= resn32; zf <= resz32; end
+				`CPX_IMM32,`CPX_ZPX,`CPX_ABS:	begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
+				`CPY_IMM32,`CPY_ZPX,`CPY_ABS:	begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
+				`CMP_IMM8: begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
 				`LDA_IMM32,`LDA_IMM16,`LDA_IMM8:	begin acc <= res; nf <= resn32; zf <= resz32; end
 				endcase
 			end
@@ -1600,7 +1611,7 @@ DECODE:
 				wadr2LSB <= abs_address[1:0];
 				wdat <= {4{x8}};
 				state <= STORE1;
-			end		// Handle abs,x
+			end	
 		`STY_ABS:
 			begin
 				pc <= pc + 32'd3;
@@ -1617,6 +1628,7 @@ DECODE:
 				wdat <= {4{8'h00}};
 				state <= STORE1;
 			end
+		// Handle abs,x
 		`ADC_ABSX,`SBC_ABSX,`AND_ABSX,`ORA_ABSX,`EOR_ABSX,`CMP_ABSX,`LDA_ABSX,
 		`ASL_ABSX,`ROL_ABSX,`LSR_ABSX,`ROR_ABSX,`INC_ABSX,`DEC_ABSX,`BIT_ABSX,
 		`LDY_ABSX:
@@ -1966,7 +1978,7 @@ DECODE:
 						4'h5:	begin res <= lfsr; lfsr <= {lfsr[30:0],lfsr_fb}; end
 						4'h6:	res <= dp8;
 						4'h7:	res <= abs8;
-						4'h8:	res <= vbr;
+						4'h8:	res <= {vbr[31:1],nmoi};
 						4'hE:	res <= {spage[31:8],sp};
 						4'hF:	res <= isp;
 						endcase
@@ -1992,6 +2004,8 @@ DECODE:
 				`DIVS_RR:	begin state <= MULDIV1; end
 				`MOD_RR:	begin state <= MULDIV1; end
 				`MODS_RR:	begin state <= MULDIV1; end
+				`ASL_RRR:	begin a <= rfoa; b <= rfob; state <= CALC; end
+				`LSR_RRR:	begin a <= rfoa; b <= rfob; state <= CALC; end
 				endcase
 				Rt <= ir[19:16];
 				pc <= pc + 32'd3;
@@ -2004,20 +2018,23 @@ DECODE:
 		`DEC_RR:	begin res <= rfoa - 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 		`INC_RR:	begin res <= rfoa + 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 
-		`ADD_IMM8:	begin res <= rfoa + {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
-		`SUB_IMM8:	begin res <= rfoa - {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
+		`ADD_IMM8:	begin res <= rfoa + {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
+		`SUB_IMM8:	begin res <= rfoa - {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
 		`OR_IMM8:	begin res <= rfoa | {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
 		`AND_IMM8: 	begin res <= rfoa & {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
 		`EOR_IMM8:	begin res <= rfoa ^ {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
+		`CMP_IMM8:	begin res <= acc - {{24{ir[15]}},ir[15:8]}; Rt <= 4'h0; pc <= pc + 32'd2; b <= {{24{ir[15]}},ir[15:8]}; end
+		`ASL_IMM8:	begin a <= rfoa; b <= ir[20:16]; Rt <= ir[15:12]; pc <= pc + 32'd3; state <= CALC; end
+		`LSR_IMM8:	begin a <= rfoa; b <= ir[20:16]; Rt <= ir[15:12]; pc <= pc + 32'd3; state <= CALC; end
 
-		`ADD_IMM16:	begin res <= rfoa + {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
-		`SUB_IMM16:	begin res <= rfoa - {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
+		`ADD_IMM16:	begin res <= rfoa + {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
+		`SUB_IMM16:	begin res <= rfoa - {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
 		`OR_IMM16:	begin res <= rfoa | {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 		`AND_IMM16:	begin res <= rfoa & {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 		`EOR_IMM16:	begin res <= rfoa ^ {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 	
-		`ADD_IMM32:	begin res <= rfoa + ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
-		`SUB_IMM32:	begin res <= rfoa - ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
+		`ADD_IMM32:	begin res <= rfoa + ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
+		`SUB_IMM32:	begin res <= rfoa - ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
 		`OR_IMM32:	begin res <= rfoa | ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
 		`AND_IMM32:	begin res <= rfoa & ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
 		`EOR_IMM32:	begin res <= rfoa ^ ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
