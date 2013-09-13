@@ -48,26 +48,28 @@ CTRLX	EQU	0x18
 XON		EQU	0x11
 XOFF	EQU	0x13
 
-CursorRow	EQU		0x212
-CursorCol	EQU		0x213
-CursorFlash	EQU		0x214
+CursorRow	EQU		0x7C2
+CursorCol	EQU		0x7C3
+CursorFlash	EQU		0x7C4
+IRQFlag		EQU		0x7C6
 
-OSSP		EQU		0x400
-TXTUNF		EQU		0x401
-VARBGN		EQU		0x402
-LOPVAR		EQU		0x403
-STKGOS		EQU		0x404
-CURRNT		EQU		0x405
+OSSP		EQU		0x700
+TXTUNF		EQU		0x701
+VARBGN		EQU		0x702
+LOPVAR		EQU		0x703
+STKGOS		EQU		0x704
+CURRNT		EQU		0x705
 BUFFER		EQU		0x406
 BUFLEN		EQU		84
-LOPPT		EQU		0x460
-LOPLN		EQU		0x461
-LOPINC		EQU		0x462
-LOPLMT		EQU		0x463
-NUMWKA		EQU		0x464
-STKINP		EQU		0x474
-STKBOT		EQU		0x475
-usrJmp		EQU		0x476
+LOPPT		EQU		0x760
+LOPLN		EQU		0x761
+LOPINC		EQU		0x762
+LOPLMT		EQU		0x763
+NUMWKA		EQU		0x764
+STKINP		EQU		0x774
+STKBOT		EQU		0x775
+usrJmp		EQU		0x776
+IRQROUT		EQU		0x777
 
 
 
@@ -127,6 +129,7 @@ public CSTART:
 	sub		#16384 ;   1000 vars
 	sta     VARBGN
 	jsr     clearVars   ; clear the variable area
+	stz		IRQROUT
 	lda     VARBGN   ; calculate number of bytes free
 	ldy		TXTUNF
 	sub     r1,r1,r3
@@ -199,15 +202,14 @@ ST6:
 ST4:
 	; here we're inserting because the line wasn't found
 	; or it was deleted	from the text area
-	ld		r1,r12			; calculate the length of new line
-	sub		r1,r1,r8
+	sub		r1,r12,r8		; calculate the length of new line
 	cmp		#2				; is it just a line no. & CR? if so, it was just a delete
 	beq		ST3
 	bcc		ST3
 
-	ld		r11,TXTUNF	; compute new end of text
-	ld		r10,r11		; r10 = old TXTUNF
-	add		r11,r11,r1		; r11 = new top of TXTUNF (r1=line length)
+	; compute new end of text
+	ld		r10,TXTUNF		; r10 = old TXTUNF
+	add		r11,r10,r1		; r11 = new top of TXTUNF (r1=line length)
 
 	cmp		r11,VARBGN	; see if there's enough room
 	bcc		ST5
@@ -284,11 +286,14 @@ TAB2:
 	db	"CL",'S'+0x80
     db  "CL",'R'+0x80
     db	"RDC",'F'+0x80
+    db	"ONIR",'Q'+0x80
+    db	"WAI",'T'+0x80
 	db	0
 TAB4:
 	db	"PEE",'K'+0x80         ;Functions
 	db	"RN",'D'+0x80
 	db	"AB",'S'+0x80
+	db  "SG",'N'+0x80
 	db	"TIC",'K'+0x80
 	db	"SIZ",'E'+0x80
 	db  "US",'R'+0x80
@@ -341,11 +346,14 @@ TAB2_1:
 	dh	_cls
 	dh  _clr
 	dh	_rdcf
+	dh  ONIRQ
+	dh	WAITIRQ
 	dh	DEFLT
 TAB4_1:
 	dh	PEEK			;Functions
 	dh	RND
 	dh	ABS
+	dh  SGN
 	dh	TICKX
 	dh	SIZEX
 	dh  USRX
@@ -381,14 +389,14 @@ DIRECT:
 	ld		r10,#TAB1_1
 EXEC:
 	jsr		IGNBLK		; ignore leading blanks
-	or		r11,r8,r0	; save the pointer
+	ld		r11,r8		; save the pointer
 	eor		r3,r3,r3	; clear match flag
 EXLP:
 	lda		(r8)		; get the program character
 	inc		r8
 	lb		r2,$0,r9	; get the table character
 	bne		EXNGO		; If end of table,
-	or		r8,r11,r0	;	restore the text pointer and...
+	ld		r8,r11		;	restore the text pointer and...
 	bra		EXGO		;   execute the default.
 EXNGO:
 	cmp		r1,r3		; Else check for period... if so, execute
@@ -398,7 +406,7 @@ EXNGO:
 	beq		EXMAT
 	inc		r10			;if not, try the next entry
 	inc		r10
-	or		r8,r11,r0	; reset the program pointer
+	ld		r8,r11		; reset the program pointer
 	eor		r3,r3,r3	; sorry, no match
 EX1:
 	lb		r1,0,r9		; get to the end of the entry
@@ -414,28 +422,18 @@ EXMAT:
 	beq		EXLP		; if not, go back for more
 EXGO:
 	; execute the appropriate routine
-	lb		r11,0,r10	; get the low order byte
-	inc		r10
-	lb		r12,0,r10	; get the low mid order byte
-	asl		r12
-	asl		r12
-	asl		r12
-	asl		r12
-	asl		r12
-	asl		r12
-	asl		r12
-	asl		r12
-	or		r11,r11,r12
-	or		r11,r11,#$FFFF0000	; add in ROM base
-	jmp		(r11)
-
-;    lb      r1,[r8]     ; get token from text space
-;    bpl
-;    and     r1,#0x7f
-;    shl     r1,#2       ; * 4 - word offset
-;    add     r1,r1,#TAB1_1
-;    lw      r1,[r1]
-;    jmp     [r1]
+	lb		r1,1,r10	; get the low mid order byte
+	asl	
+	asl
+	asl
+	asl
+	asl
+	asl
+	asl
+	asl
+	orb		r1,r1,0,r10	; get the low order byte
+	or		r1,r1,#$FFFF0000	; add in ROM base
+	jmp		(r1)
 
     
 ;******************************************************************
@@ -491,11 +489,28 @@ RUN:
 RUNNXL					; RUN <next line>
 	lda		CURRNT	; executing a program?
 	beq		WSTART	; if not, we've finished a direct stat.
+	lda		IRQROUT		; are we handling IRQ's ?
+	beq		RUN1
+	ld 		r0,IRQFlag		; was there an IRQ ?
+	beq		RUN1
+	stz		IRQFlag
+	jsr		PUSHA		; the same code as a GOSUB
+	push	r8
+	lda		CURRNT
+	pha					; found it, save old 'CURRNT'...
+	lda		STKGOS
+	pha					; and 'STKGOS'
+	stz		LOPVAR		; load new values
+	tsx
+	stx		STKGOS
+	ld		r9,IRQROUT
+	bra		RUNTSL
+RUN1
 	lda		#0	    ; else find the next line number
 	ld		r9,r8
 	jsr		FNDLNP		; search for the next line
-	cmp		#0
-	bne		RUNTSL
+;	cmp		#0
+;	bne		RUNTSL
 	cmp		r9,TXTUNF; if we've fallen off the end, stop
 	beq		WSTART
 	bcs		WSTART
@@ -515,7 +530,10 @@ RUNSML                 ; RUN <same line>
 ; line, and jumps to 'RUNTSL' to do it.
 ;
 GOTO
+	lda		#'G'
+	jsr		DisplayChar
 	jsr		OREXPR		;evaluate the following expression
+	jsr		DisplayWord
 	ld      r5,r1
 	jsr 	ENDCHK		;must find end of line
 	ld      r1,r5
@@ -541,6 +559,33 @@ cv1:
     bne		cv1
     pop		r6
     rts
+
+;******************************************************************
+; ONIRQ <line number>
+; ONIRQ sets up an interrupt handler which acts like a specialized
+; subroutine call. ONIRQ is coded like a GOTO that never executes.
+;******************************************************************
+;
+ONIRQ:
+	jsr		OREXPR		;evaluate the following expression
+	ld      r5,r1
+	jsr 	ENDCHK		;must find end of line
+	ld      r1,r5
+	jsr 	FNDLN		; find the target line
+	cmp		#0
+	bne		ONIRQ1
+	stz		IRQROUT
+	jmp		FINISH
+ONIRQ1:
+	st		r9,IRQROUT
+	jmp		FINISH
+
+
+WAITIRQ:
+	jsr		CHKIO		; see if a control-C was pressed
+	ld		r0,IRQFlag
+	beq		WAITIRQ
+	jmp		FINISH
 
 
 ;******************************************************************
@@ -621,7 +666,7 @@ PR0:
 	ld		r4,#PR1
 	jsr		TSTC		;else is it a format?
 	jsr		OREXPR		; yes, evaluate expression
-	or		r5,r1,r0	; and save it as print width
+	ld		r5,r1	; and save it as print width
 	bra		PR3		; look for more to print
 PR1:
 	ldy		#'$'
@@ -862,7 +907,7 @@ IF1:
 	cmp		#0
     bne	    RUNSML		; is it zero? if not, continue
 IF2:
-    or		r9,r8,r0	; set lookup pointer
+    ld		r9,r8	; set lookup pointer
 	lda		#0		; find line #0 (impossible)
 	jsr		FNDSKP		; if so, skip the rest of the line
 	cmp		#0
@@ -1015,14 +1060,14 @@ LOD1:
 	bne		LOD1	; if not, is it start of line? if not, wait for it
 	jsr		GCHAR		; get line number
 	sta		(r8)		; store it
-	add		r8,r8,#1
+	inc		r8
 LOD2:
 	jsr		GOAUXI		; get another text char.
 	cmp		#0
 	beq		LOD2
 	bcc		LOD2
 	sta		(r8)
-	add		r8,r8,#1	; store it
+	inc		r8			; store it
 	cmp		#CR
 	bne		LOD2		; is it the end of the line? if not, go back for more
 	bra		LOD1		; if so, start a new line
@@ -1048,9 +1093,9 @@ GCHAR1:
 	asl		r5,r5
 	asl		r5,r5
 	or		r5,r5,r1
-	sub		r6,r6,#1
+	dec		r6
 	bne		GCHAR1
-	or		r1,r5,r0
+	ld		r1,r5
 	pop		r6
 	pop		r5
 	rts
@@ -1082,11 +1127,11 @@ SAVE1:
 	lda		#':'		; if not, start a line
 	jsr		GOAUXO
 	lda		(r8)		; get line number
-	add		r8,r8,#1
+	inc		r8
 	jsr		PWORD       ; output line number as 4-digit hex
 SAVE2:
 	lda		(r8)		; get a text char.
-	add		r8,r8,#1
+	inc		r8
 	cmp		#CR
 	beq		SAVE1		; is it the end of the line? if so, send CR & LF and start new line
 	jsr		GOAUXO		; send it out
@@ -1154,15 +1199,10 @@ tah1:
 
 
 ;******************************************************************
-; *** POKE *** & SYSX ***
+; *** POKE ***
 ;
-; 'POKE expr1,expr2' stores the byte from 'expr2' into the memory
+; 'POKE expr1,expr2' stores the word from 'expr2' into the memory
 ; address specified by 'expr1'.
-;
-; 'SYSX expr' jumps to the machine language subroutine whose
-; starting address is specified by 'expr'.  The subroutine can use
-; all registers but must leave the stack the way it found it.
-; The subroutine returns to the interpreter by executing an RET.
 ;******************************************************************
 ;
 POKE:
@@ -1179,14 +1219,13 @@ PKER:
 	lda		#msgComma
 	jmp		ERROR		; if no comma, say "What?"
 
-POKEC:
-	jmp		FINISH
 
-POKEH:
-	jmp		FINISH
-
-POKEW:
-	jmp		FINISH
+;******************************************************************
+; 'SYSX expr' jumps to the machine language subroutine whose
+; starting address is specified by 'expr'.  The subroutine can use
+; all registers but must leave the stack the way it found it.
+; The subroutine returns to the interpreter by executing an RTS.
+;******************************************************************
 
 SYSX:
 	jsr		OREXPR		; get the subroutine's address
@@ -1672,7 +1711,8 @@ PEEK:
 USRX:
 	jsr		PARN		; get expression value
 	push	r8			; save the text pointer
-	jsr		(usrJmp)	; get usr vector, jump to the subroutine
+	ldx		#0
+	jsr		(usrJmp,x)	; get usr vector, jump to the subroutine
 	pop		r8			; restore the text pointer
 	rts
 
@@ -1784,29 +1824,6 @@ SIZEX:
 ; an expression.  It evaluates the expression and sets the variable
 ; to that value.
 ;
-; 'FIN' checks the end of a command.  If it ended with ":",
-; execution continues.	If it ended with a CR, it finds the
-; the next line and continues from there.
-;
-; 'ENDCHK' checks if a command is ended with a CR. This is
-; required in certain commands, such as GOTO, RETURN, STOP, etc.
-;
-; 'ERROR' prints the string pointed to by r1. It then prints the
-; line pointed to by CURRNT with a "?" inserted at where the
-; old text pointer (should be on top of the stack) points to.
-; Execution of Tiny BASIC is stopped and a warm start is done.
-; If CURRNT is zero (indicating a direct command), the direct
-; command is not printed. If CURRNT is -1 (indicating
-; 'INPUT' command in progress), the input line is not printed
-; and execution is not terminated but continues at 'INPERR'.
-;
-; Related to 'ERROR' are the following:
-; 'QWHAT' saves text pointer on stack and gets "What?" message.
-; 'AWHAT' just gets the "What?" message and jumps to 'ERROR'.
-; 'QSORRY' and 'ASORRY' do the same kind of thing.
-; 'QHOW' and 'AHOW' also do this for "How?".
-;
-
 ; returns
 ; r2 = variable's address
 ;
@@ -1831,6 +1848,10 @@ SV1:
     jmp	    QWHAT		; if no "=" sign
 
 
+; 'FIN' checks the end of a command.  If it ended with ":",
+; execution continues.	If it ended with a CR, it finds the
+; the next line and continues from there.
+;
 FIN:
 	ldy		#':'
 	ld		r4,#FI1
@@ -1848,11 +1869,16 @@ FI2:
 	rts					; else return to the caller
 
 
+; 'ENDCHK' checks if a command is ended with a CR. This is
+; required in certain commands, such as GOTO, RETURN, STOP, etc.
+;
 ; Check that there is nothing else on the line
 ; Registers Affected
 ;   r1
 ;
 ENDCHK:
+	lda		#'E'
+	jsr		DisplayChar
 	jsr		IGNBLK
 	lda		(r8)
 	cmp		#CR
@@ -1862,6 +1888,21 @@ ENDCHK:
 ec1:
 	rts
 
+; 'ERROR' prints the string pointed to by r1. It then prints the
+; line pointed to by CURRNT with a "?" inserted at where the
+; old text pointer (should be on top of the stack) points to.
+; Execution of Tiny BASIC is stopped and a warm start is done.
+; If CURRNT is zero (indicating a direct command), the direct
+; command is not printed. If CURRNT is -1 (indicating
+; 'INPUT' command in progress), the input line is not printed
+; and execution is not terminated but continues at 'INPERR'.
+;
+; Related to 'ERROR' are the following:
+; 'QWHAT' saves text pointer on stack and gets "What?" message.
+; 'AWHAT' just gets the "What?" message and jumps to 'ERROR'.
+; 'QSORRY' and 'ASORRY' do the same kind of thing.
+; 'QHOW' and 'AHOW' also do this for "How?".
+;
 TOOBIG:
 	lda		#msgTooBig
 	bra		ERROR
@@ -1872,7 +1913,7 @@ QWHAT:
 	lda		#msgWhat
 ERROR:
 	jsr		PRMESG		; display the error message
-	lda		CURRNT		; get the current line number
+	lda		CURRNT		; get the current line pointer
 	beq		ERROR1		; if zero, do a warm start
 	cmp		#-1
 	beq		INPERR		; is the line no. pointer = -1? if so, redo input
@@ -1880,7 +1921,7 @@ ERROR:
 	stz		(r8)		; put a zero where the error is
 	lda		CURRNT		; point to start of current line
 	jsr		PRTLN		; display the line in error up to the 0
-	or      r6,r1,r0    ; save off end pointer
+	ld      r6,r1	    ; save off end pointer
 	st		r5,(r8)		; restore the character
 	lda		#'?'		; display a "?"
 	jsr		GOOUT
@@ -1946,7 +1987,7 @@ GL3:
 	dec		r8			; decrement the text pointer
 	bra		GL1			; back for more
 GL4:
-	or		r1,r8,r0		; delete the whole line
+	ld		r1,r8		; delete the whole line
 	sub		r5,r1,#BUFFER   ; figure out how many backspaces we need
 	beq		GL6				; if none needed, brnch
 	dec		r5			; loop count is one less

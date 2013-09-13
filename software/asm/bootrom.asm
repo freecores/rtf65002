@@ -106,6 +106,25 @@ endm
 
 ; BIOS vars at the top of the 8kB scratch memory
 ;
+JMPTMP		EQU		0x7A0
+SP8Save		EQU		0x7AE
+SRSave		EQU		0x7AF
+R1Save		EQU		0x7B0
+R2Save		EQU		0x7B1
+R3Save		EQU		0x7B2
+R4Save		EQU		0x7B3
+R5Save		EQU		0x7B4
+R6Save		EQU		0x7B5
+R7Save		EQU		0x7B6
+R8Save		EQU		0x7B7
+R9Save		EQU		0x7B8
+R10Save		EQU		0x7B9
+R11Save		EQU		0x7BA
+R12Save		EQU		0x7BB
+R13Save		EQU		0x7BC
+R14Save		EQU		0x7BD
+R15Save		EQU		0x7BE
+SPSave		EQU		0x7BF
 
 CharColor	EQU		0x7C0
 ScreenColor	EQU		0x7C1
@@ -113,6 +132,7 @@ CursorRow	EQU		0x7C2
 CursorCol	EQU		0x7C3
 CursorFlash	EQU		0x7C4
 Milliseconds	EQU		0x7C5
+IRQFlag		EQU		0x7C6
 
 KeybdHead	EQU		0x7D0
 KeybdTail	EQU		0x7D1
@@ -146,8 +166,10 @@ start
 	trs		r0,abs8			; and 8 bit mode absolute address offset
 
 	; setup interrupt vectors
-	ldx		#$05FFF000		; interrupt vector table from $5FFF000 to $5FFF1FF
+	ldx		#$05FFF001		; interrupt vector table from $5FFF000 to $5FFF1FF
+							; also sets nmoi policy (native mode on interrupt)
 	trs		r2,vbr
+	dex
 	lda		#brk_rout
 	sta		(x)
 	lda		#slp_rout
@@ -798,10 +820,7 @@ dispnyb1:
 ;
 DisplayByte:
 	pha
-	lsr
-	lsr
-	lsr
-	lsr
+	lsr		r1,r1,#4
 	jsr		DisplayNybble
 	pla
 	jmp		DisplayNybble	; tail rts 
@@ -812,7 +831,7 @@ message "785"
 ;
 DisplayHalf:
 	pha
-	m_lsr8
+	lsr		r1,r1,#8
 	jsr		DisplayByte
 	pla
 	jsr		DisplayByte
@@ -825,8 +844,7 @@ message "797"
 ;
 DisplayWord:
 	pha
-	m_lsr8
-	m_lsr8
+	lsr		r1,r1,#16
 	jsr		DisplayHalf
 	pla
 	jsr		DisplayHalf
@@ -872,7 +890,7 @@ message "845"
 ;==============================================================================
 ;
 Monitor:
-	ldx		#$1000			; top of stack; reset the stack pointer
+	ldx		#$05FFFFF8		; setup stack pointer top of memory
 	txs
 	stz		KeybdEcho		; turn off keyboard echo
 PromptLn:
@@ -915,7 +933,15 @@ Prompt2:
 	cmp		#':'
 	beq		EditMem
 	cmp		#'D'
-	beq		DumpMem
+	bne		Prompt8
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	cmp		#'R'
+	beq		DumpReg
+	dey
+	bra		DumpMem
+Prompt8:
 	cmp		#'F'
 	beq		FillMem
 Prompt7:
@@ -1001,12 +1027,13 @@ HelpMsg:
 	db	"S = Boot from SD Card",CR,LF
 	db	": = Edit memory bytes",CR,LF
 	db	"L = Load S19 file",CR,LF
+	db  "DR = Dump registers",CR,LF
 	db	"D = Dump memory",CR,LF
 	db	"F = Fill memory",CR,LF
 	db	"B = start tiny basic",CR,LF
 	db	"b = start EhBasic 6502",CR,LF
 	db	"J = Jump to code",CR,LF
-	db	"R = Random lines",CR,LF
+	db	"R[n] = Set register value",CR,LF
 	db	"T = get temperature",CR,LF
 	db	"P = Piano",CR,LF,0
 
@@ -1051,7 +1078,48 @@ edtmem1:
 ExecuteCode:
 	jsr		ignBlanks
 	jsr		GetHexNumber
-	jsr		(r1)
+	st		r1,JMPTMP
+	lda		#xcret			; push return address so we can do an indirect jump
+	pha
+	ld		r1,R1Save
+	ld		r2,R2Save
+	ld		r3,R3Save
+	ld		r4,R4Save
+	ld		r5,R5Save
+	ld		r6,R6Save
+	ld		r7,R7Save
+	ld		r8,R8Save
+	ld		r9,R9Save
+	ld		r10,R10Save
+	ld		r11,R11Save
+	ld		r12,R12Save
+	ld		r13,R13Save
+	ld		r14,R14Save
+	ld		r15,R15Save
+	jmp		(JMPTMP)
+xcret:
+	php
+	st		r1,R1Save
+	st		r2,R2Save
+	st		r3,R3Save
+	st		r4,R4Save
+	st		r5,R5Save
+	st		r6,R6Save
+	st		r7,R7Save
+	st		r8,R8Save
+	st		r9,R9Save
+	st		r10,R10Save
+	st		r11,R11Save
+	st		r12,R12Save
+	st		r13,R13Save
+	st		r14,R14Save
+	st		r15,R15Save
+	tsr		sp,r1
+	st		r1,SPSave
+	tsr		sp8,r1
+	st		r1,SP8Save
+	pla
+	sta		SRSave
 	jmp     Monitor
 
 LoadSector:
@@ -1061,6 +1129,41 @@ LoadSector:
 	jsr		spi_read_sector
 	jmp		Monitor
 
+;------------------------------------------------------------------------------
+; Dump the register set.
+;------------------------------------------------------------------------------
+DumpReg:
+	ldy		#0
+DumpReg1:
+	jsr		CRLF
+	lda		#':'
+	jsr		DisplayChar
+	lda		#'R'
+	jsr		DisplayChar
+	ldx		#0
+	tya
+	jsr		PRTNUM
+	lda		#' '
+	jsr		DisplayChar
+	lda		R1Save,y
+	jsr		DisplayWord
+	iny
+	cpy		#15
+	bne		DumpReg1
+	jsr		CRLF
+	lda		#':'
+	jsr		DisplayChar
+	lda		#'S'
+	jsr		DisplayChar
+	lda		#'P'
+	jsr		DisplayChar
+	lda		#' '
+	jsr		DisplayChar
+	lda		SPSave
+	jsr		DisplayWord
+	jsr		CRLF
+	rts
+		
 ;------------------------------------------------------------------------------
 ; Do a memory dump of the requested location.
 ;------------------------------------------------------------------------------
@@ -1121,10 +1224,7 @@ gthxn2:
 	jsr		AsciiToHexNybble
 	cmp		#-1
 	beq		gthxn1
-	asl		r2,r2
-	asl		r2,r2
-	asl		r2,r2
-	asl		r2,r2
+	asl		r2,r2,#4
 	and		#$0f
 	or		r2,r2,r1
 	dec		r4
@@ -1244,11 +1344,11 @@ spi_read_sector:
 	push	r4
 	
 	sta		SPIMASTER+SPI_SD_SECT_7_0_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_15_8_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_23_16_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_31_24_REG
 
 	ld		r4,#20	; retry count
@@ -1330,11 +1430,11 @@ spi_write_sect1:
 	; set the sector number in the spi master address registers
 	pla
 	sta		SPIMASTER+SPI_SD_SECT_7_0_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_15_8_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_23_16_REG
-	m_lsr8
+	lsr		r1,r1,#8
 	sta		SPIMASTER+SPI_SD_SECT_31_24_REG
 
 	; issue the write command
@@ -1350,10 +1450,7 @@ spi_write_sect2:
 	cmp		#SPI_TRANS_BUSY
 	beq		spi_write_sect2
 	lda		SPIMASTER+SPI_TRANS_ERROR_REG
-	lsr
-	lsr
-	lsr
-	lsr
+	lsr		r1,r1,#4
 	and		#3
 	cmp		#SPI_WRITE_NO_ERROR
 	bne		spi_write_error
@@ -1378,38 +1475,22 @@ spi_read_part:
 	lda		#0								; r1 = sector number (#0)
 	ldx		#SECTOR_BUF<<2					; r2 = target address (word to byte address)
 	jsr		spi_read_sector
+	cmp		#0
+	bne		spi_rp1
 	lb		r1,BYTE_SECTOR_BUF+$1C9
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$1C8
-	asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$1C7
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$1C6
 	sta		startSector						; r1 = 0, for okay status
-	lda		#0
 	plx
+	lda		#0
+	rts
+spi_rp1:
+	plx
+	lda		#1
 	rts
 
 ; Read the boot sector from the disk.
@@ -1453,49 +1534,21 @@ msgFoundEB:
 ;
 loadBootFile:
 	lb		r1,BYTE_SECTOR_BUF+$17			; sectors per FAT
-	m_asl8
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$16
 	bne		loadBootFile7
 	lb		r1,BYTE_SECTOR_BUF+$27			; sectors per FAT, FAT32
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$26
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$25
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$24
 loadBootFile7:
 	lb		r4,BYTE_SECTOR_BUF+$10			; number of FATs
 	mul		r3,r1,r4						; offset
 	lb		r1,BYTE_SECTOR_BUF+$F			; r1 = # reserved sectors before FAT
-asl
-asl
-asl
-asl
-asl
-asl
-asl
-asl
+	asl		r1,r1,#8
 	orb		r1,r1,BYTE_SECTOR_BUF+$E
 	add		r3,r3,r1						; r3 = root directory sector number
 	ld		r6,startSector
@@ -1560,6 +1613,7 @@ spi_write_error_msg:
 ;------------------------------------------------------------------------------
 ;
 p100Hz:
+	inc		IRQFlag			; support tiny basic's IRQ rout
 	inc		TEXTSCR+83
 	stz		0xFFDCFFFC		; clear interrupt
 	rti
@@ -1583,7 +1637,7 @@ nmirout
 	rti
 message "1298"
 include "TinyBasic65002.asm"
-
+message "1640"
 	org $0FFFFFFF4		; NMI vector
 	dw	nmirout
 
