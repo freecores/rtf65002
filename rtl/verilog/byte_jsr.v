@@ -76,3 +76,63 @@ BYTE_JSR3:
 			dmiss <= `TRUE;
 		end
 	end
+
+BYTE_JSR_INDX1:
+	if (ack_i) begin
+		state <= BYTE_JSR_INDX2;
+		retstate <= BYTE_JSR_INDX2;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		if (dhit) begin
+			wrsel <= sel_o;
+			wr <= 1'b1;
+		end
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
+	end
+BYTE_JSR_INDX2:
+	begin
+		radr <= {spage[31:8],sp[7:2]};
+		wadr <= {spage[31:8],sp[7:2]};
+		radr2LSB <= sp[1:0];
+		wadr2LSB <= sp[1:0];
+		wdat <= {4{pcp2[7:0]}};
+		cyc_o <= 1'b1;
+		stb_o <= 1'b1;
+		we_o <= 1'b1;
+		case(sp[1:0])
+		2'd0:	sel_o <= 4'b0001;
+		2'd1:	sel_o <= 4'b0010;
+		2'd2:	sel_o <= 4'b0100;
+		2'd3:	sel_o <= 4'b1000;
+		endcase
+		adr_o <= {spage[31:8],sp[7:2],2'b00};
+		dat_o <= {4{pcp2[7:0]}};
+		sp <= sp_dec;
+		state <= BYTE_JSR_INDX3;
+	end
+BYTE_JSR_INDX3:
+	if (ack_i) begin
+		state <= BYTE_JMP_IND1;
+		retstate <= BYTE_JMP_IND1;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'd0;
+		dat_o <= 32'd0;
+		radr <= absx_address[15:2];
+		radr2LSB <= absx_address[1:0];
+		if (dhit) begin
+			wrsel <= sel_o;
+			wr <= 1'b1;
+		end
+		else if (write_allocate) begin
+			state <= WAIT_DHIT;
+			dmiss <= `TRUE;
+		end
+	end

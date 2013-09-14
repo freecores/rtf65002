@@ -11,10 +11,13 @@ wire [33:0] a;
 tri [31:0] d;
 wire [31:0] dato;
 wire [31:0] dati;
+wire [2:0] cti;
 wire cyc;
 wire stb;
 wire ack;
 wire [7:0] udo;
+wire btrm_ack;
+wire [31:0] btrm_dato;
 
 initial begin
 	clk = 1;
@@ -34,12 +37,12 @@ rtf65002d cpu0 (
 	.nmi_i(nmi),
 	.irq_i(1'b0),
 	.bte_o(),
-	.cti_o(),
+	.cti_o(cti),
 	.bl_o(bl),
 	.lock_o(),
 	.cyc_o(cyc),
 	.stb_o(stb),
-	.ack_i(1'b1),
+	.ack_i(ack),
 	.we_o(wr),
 	.sel_o(sel),
 	.adr_o(a),
@@ -49,19 +52,27 @@ rtf65002d cpu0 (
 
 wire uartcs = cyc && stb && a[33:8]==26'h00000CF;
 wire romcs = ~(cyc && stb && a[33:28]==6'h0F);
-wire ramcs = ~(cyc && stb && a[33:15]==19'h00);
+wire ramcs = ~(cyc && stb && (a[33:15]==19'h00 || (a[33:28]!=6'hF && a[33:28]!=6'h0)));
 wire romcs1 = ~(cyc && stb && a[33:13]==21'h07);	// E000
 
 assign d = wr ? dato : 32'bz;
-assign dati = ~romcs ? d : 32'bz;
+assign dati = ~romcs ? btrm_dato : 32'bz;
 assign dati = ~ramcs ? d : 32'bz;
 assign dati = uartcs ? {4{udo}} : 32'bz;
 assign dati = ~romcs1 ? d : 32'bz;
 
-rom2Kx32 #(.MEMFILE("t65c.mem")) rom0(.ce(romcs), .oe(wr), .addr(a[12:2]), .d(d));
+assign ack =
+	btrm_ack |
+	~ramcs |
+	~romcs1 |
+	uartcs
+	;
+
+//rom2Kx32 #(.MEMFILE("t65c.mem")) rom0(.ce(romcs), .oe(wr), .addr(a[12:2]), .d(d));
 rom2Kx32 #(.MEMFILE("t65c.mem")) rom1(.ce(romcs1), .oe(wr), .addr(a[12:2]), .d(d));
 ram8Kx32 ram0 (.clk(clk), .ce(ramcs), .oe(wr), .we(~wr), .sel(sel), .addr(a[14:2]), .d(d));
 uart uart0(.clk(clk), .cs(uartcs), .wr(wr), .a(a[2:0]), .di(dato[7:0]), .do(udo));
+bootrom ubr1 (.rst_i(rst), .clk_i(clk), .cti_i(cti), .cyc_i(cyc), .stb_i(stb), .ack_o(btrm_ack), .adr_i(a), .dat_o(btrm_dato), .perr());
 
 always @(posedge clk) begin
 	if (rst)
@@ -70,10 +81,10 @@ always @(posedge clk) begin
 		n = n + 1;
 	if ((n & 7)==0)
 		$display("t   n  cti cyc we   addr din adnx do re vma wr ird sync vma nmi irq  PC  IR A  X  Y  SP nvmdizcb\n");
-	$display("%d %d %b  %b  %b  %h %h %h %h %h %h %h %h %h %h %h %h %b%b%b%b%b%b%b%b %d %b %b %b %b %b",
+	$display("%d %d %b  %b  %b  %h %h %h %h %h %h %h %h %h %h %h %h %b%b%b%b%b%b%b%b %d %b %b %b %b %b %b",
 		$time, n, cpu0.cti_o, cpu0.cyc_o, cpu0.we_o, cpu0.adr_o, cpu0.dat_i, cpu0.dat_o, cpu0.res, cpu0.res8, cpu0.pc, cpu0.ir,
 		cpu0.acc, cpu0.x, cpu0.y, cpu0.isp, cpu0.sp, 
-		cpu0.nf, cpu0.vf, cpu0.df, cpu0.im, cpu0.zf, cpu0.cf, cpu0.bf, cpu0.em, cpu0.state, cpu0.imiss, cpu0.ihit,cpu0.hit0,cpu0.hit1,cpu0.imiss);
+		cpu0.nf, cpu0.vf, cpu0.df, cpu0.im, cpu0.zf, cpu0.cf, cpu0.bf, cpu0.em, cpu0.state, cpu0.imiss, cpu0.ihit,cpu0.hit0,cpu0.hit1,cpu0.imiss,ubr1.cs);
 end
 	
 endmodule

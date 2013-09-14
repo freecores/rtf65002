@@ -119,8 +119,8 @@ LOAD_IBUF2:
 	if (ack_i) begin
 		case(pc[1:0])
 		2'd0:	ibuf[55:32] <= dat_i[23:0];
-		2'd1:	ibuf[55:24] <= dat_i[31:0];
-		2'd2:	ibuf[47:16] <= dat_i[23:0];
+		2'd1:	ibuf[55:24] <= dat_i;
+		2'd2:	ibuf[47:16] <= dat_i;
 		2'd3:	ibuf[39:8] <= dat_i;
 		endcase
 		cstate <= LOAD_IBUF3;
