@@ -48,6 +48,16 @@ BYTE_IX2:
 		radr2LSB <= radr34p1[1:0];
 		state <= BYTE_IX3;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_IX3:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -72,6 +82,16 @@ BYTE_IX4:
 		ia[15:8] <= dati;
 		ia[31:16] <= 16'h0000;
 		state <= BYTE_IX5;
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end
 BYTE_IX5:
 	begin

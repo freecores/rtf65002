@@ -37,6 +37,16 @@ BYTE_JSL1:
 			dmiss <= `TRUE;
 		end
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_JSL2:
 	begin
 		radr <= {spage[31:8],sp[7:2]};
@@ -74,6 +84,16 @@ BYTE_JSL3:
 			state <= WAIT_DHIT;
 			dmiss <= `TRUE;
 		end
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end
 BYTE_JSL4:
 	begin
@@ -113,6 +133,16 @@ BYTE_JSL5:
 			dmiss <= `TRUE;
 		end
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_JSL6:
 	begin
 		radr <= {spage[31:8],sp[7:2]};
@@ -151,4 +181,14 @@ BYTE_JSL7:
 			dmiss <= `TRUE;
 		end
 		pc <= ir[39:8];
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end

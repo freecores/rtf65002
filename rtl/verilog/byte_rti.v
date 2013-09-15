@@ -62,6 +62,16 @@ BYTE_RTI10:
 		radr2LSB <= sp_inc[1:0];
 		state <= BYTE_RTI1;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTI1:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -90,6 +100,16 @@ BYTE_RTI2:
 		sp <= sp_inc;
 		pc[7:0] <= dati;
 		state <= BYTE_RTI3;
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end
 BYTE_RTI3:
 	if (unCachedData) begin
@@ -120,6 +140,16 @@ BYTE_RTI4:
 		pc[15:8] <= dati;
 		state <= BYTE_RTI5;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTI5:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -149,6 +179,16 @@ BYTE_RTI6:
 		pc[23:16] <= dati;
 		state <= BYTE_RTI7;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTI7:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -171,4 +211,14 @@ BYTE_RTI8:
 		adr_o <= 34'h0;
 		pc[31:24] <= dati;
 		state <= IFETCH;
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end

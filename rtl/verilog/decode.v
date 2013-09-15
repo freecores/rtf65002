@@ -75,8 +75,8 @@ DECODE:
 			begin
 				state <= IFETCH;
 				case(ir[23:20])
-				`ADD_RR:	begin res <= rfoa + rfob; a <= rfoa; b <= rfob; end
-				`SUB_RR:	begin res <= rfoa - rfob; a <= rfoa; b <= rfob; end
+				`ADD_RR:	begin res <= rfoa + rfob + {31'b0,df&cf}; a <= rfoa; b <= rfob; end
+				`SUB_RR:	begin res <= rfoa - rfob - {31'b0,df&~cf&|ir[19:16]}; a <= rfoa; b <= rfob; end
 				`AND_RR:	begin res <= rfoa & rfob; a <= rfoa; b <= rfob; end	// for bit flags
 				`OR_RR:		begin res <= rfoa | rfob; a <= rfoa; b <= rfob; end
 				`EOR_RR:	begin res <= rfoa ^ rfob; a <= rfoa; b <= rfob; end
@@ -100,8 +100,8 @@ DECODE:
 		`DEC_RR:	begin res <= rfoa - 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 		`INC_RR:	begin res <= rfoa + 32'd1; pc <= pc + 32'd2; Rt <= ir[15:12]; end
 
-		`ADD_IMM8:	begin res <= rfoa + {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
-		`SUB_IMM8:	begin res <= rfoa - {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
+		`ADD_IMM8:	begin res <= rfoa + {{24{ir[23]}},ir[23:16]} + {31'b0,df&cf}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
+		`SUB_IMM8:	begin res <= rfoa - {{24{ir[23]}},ir[23:16]} - {31'b0,df&~cf&|ir[15:12]}; Rt <= ir[15:12]; pc <= pc + 32'd3; a <= rfoa; b <= {{24{ir[23]}},ir[23:16]}; end
 		`OR_IMM8:	begin res <= rfoa | {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
 		`AND_IMM8: 	begin res <= rfoa & {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
 		`EOR_IMM8:	begin res <= rfoa ^ {{24{ir[23]}},ir[23:16]}; Rt <= ir[15:12]; pc <= pc + 32'd3; b <= {{24{ir[23]}},ir[23:16]}; end
@@ -109,14 +109,14 @@ DECODE:
 		`ASL_IMM8:	begin a <= rfoa; b <= ir[20:16]; Rt <= ir[15:12]; pc <= pc + 32'd3; state <= CALC; end
 		`LSR_IMM8:	begin a <= rfoa; b <= ir[20:16]; Rt <= ir[15:12]; pc <= pc + 32'd3; state <= CALC; end
 
-		`ADD_IMM16:	begin res <= rfoa + {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
-		`SUB_IMM16:	begin res <= rfoa - {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
+		`ADD_IMM16:	begin res <= rfoa + {{16{ir[31]}},ir[31:16]} + {31'b0,df&cf}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
+		`SUB_IMM16:	begin res <= rfoa - {{16{ir[31]}},ir[31:16]} - {31'b0,df&~cf&|ir[15:12]}; Rt <= ir[15:12]; pc <= pc + 32'd4; a <= rfoa; b <= {{16{ir[31]}},ir[31:16]}; end
 		`OR_IMM16:	begin res <= rfoa | {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 		`AND_IMM16:	begin res <= rfoa & {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 		`EOR_IMM16:	begin res <= rfoa ^ {{16{ir[31]}},ir[31:16]}; Rt <= ir[15:12]; pc <= pc + 32'd4; b <= {{16{ir[31]}},ir[31:16]}; end
 	
-		`ADD_IMM32:	begin res <= rfoa + ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
-		`SUB_IMM32:	begin res <= rfoa - ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
+		`ADD_IMM32:	begin res <= rfoa + ir[47:16]; Rt <= ir[15:12] + {31'b0,df&cf}; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
+		`SUB_IMM32:	begin res <= rfoa - ir[47:16]; Rt <= ir[15:12] - {31'b0,df&~cf&|ir[15:12]}; pc <= pc + 32'd6; a <= rfoa; b <= ir[47:16]; end
 		`OR_IMM32:	begin res <= rfoa | ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
 		`AND_IMM32:	begin res <= rfoa & ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
 		`EOR_IMM32:	begin res <= rfoa ^ ir[47:16]; Rt <= ir[15:12]; pc <= pc + 32'd6; b <= ir[47:16]; end
@@ -129,7 +129,8 @@ DECODE:
 			begin
 				radr <= zpx32xy_address;
 				pc <= pc + 32'd3;
-				state <= LOAD1;
+				load_what <= `WORD_311;
+				state <= LOAD_MAC1;
 			end
 		`ORB_ZPX:
 			begin
@@ -138,13 +139,15 @@ DECODE:
 				radr <= zpx32_address[31:2];
 				radr2LSB <= zpx32_address[1:0];
 				pc <= pc + 32'd4;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`LDX_ABS,`LDY_ABS:
 			begin
 				radr <= ir[39:8];
 				pc <= pc + 32'd5;
-				state <= LOAD1;
+				load_what <= `WORD_311;
+				state <= LOAD_MAC1;
 			end
 		`ORB_ABS:
 			begin
@@ -153,13 +156,15 @@ DECODE:
 				radr <= ir[47:18];
 				radr2LSB <= ir[17:16];
 				pc <= pc + 32'd6;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`LDX_ABSY,`LDY_ABSX:
 			begin
 				radr <= absx32xy_address;
 				pc <= pc + 32'd6;
-				state <= LOAD1;
+				load_what <= `WORD_311;
+				state <= LOAD_MAC1;
 			end
 		`ORB_ABSX:
 			begin
@@ -168,7 +173,8 @@ DECODE:
 				radr <= absx32_address[31:2];
 				radr2LSB <= absx32_address[1:0];
 				pc <= pc + 32'd7;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ST_ZPX:
 			begin
@@ -248,13 +254,15 @@ DECODE:
 				Rt <= ir[19:16];
 				radr <= zpx32_address;
 				pc <= pc + 32'd4;
-				state <= LOAD1;			
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ASL_ZPX,`ROL_ZPX,`LSR_ZPX,`ROR_ZPX,`INC_ZPX,`DEC_ZPX:
 			begin
 				radr <= dp + rfoa + ir[23:12];
 				pc <= pc + 32'd3;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ADD_IX,`SUB_IX,`OR_IX,`AND_IX,`EOR_IX,`ST_IX:
 			begin
@@ -265,7 +273,8 @@ DECODE:
 					Rt <= ir[19:16];
 				pc <= pc + 32'd4;
 				radr <= dp + ir[31:20] + rfob;
-				state <= IX1;			
+				load_what <= `IA_310;
+				state <= LOAD_MAC1;			
 			end
 		`ADD_RIND,`SUB_RIND,`OR_RIND,`AND_RIND,`EOR_RIND,`ST_RIND:
 			begin
@@ -281,7 +290,8 @@ DECODE:
 				else begin
 					Rt <= ir[19:16];
 					pc <= pc + 32'd3;
-					state <= LOAD1;			
+					load_what <= `WORD_310;
+					state <= LOAD_MAC1;
 				end
 			end
 		`ADD_IY,`SUB_IY,`OR_IY,`AND_IY,`EOR_IY,`ST_IY:
@@ -292,8 +302,10 @@ DECODE:
 				else
 					Rt <= ir[19:16];
 				pc <= pc + 32'd4;
+				isIY <= 1'b1;
 				radr <= dp + ir[31:20];
-				state <= IY1;	
+				load_what <= `IA_310;
+				state <= LOAD_MAC1;	
 			end
 		`ADD_ABS,`SUB_ABS,`OR_ABS,`AND_ABS,`EOR_ABS:
 			begin
@@ -301,13 +313,15 @@ DECODE:
 				radr <= ir[47:16];
 				Rt <= ir[15:12];
 				pc <= pc + 32'd6;
-				state <= LOAD1;			
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ASL_ABS,`ROL_ABS,`LSR_ABS,`ROR_ABS,`INC_ABS,`DEC_ABS:
 			begin
 				radr <= ir[39:8];
 				pc <= pc + 32'd5;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ADD_ABSX,`SUB_ABSX,`OR_ABSX,`AND_ABSX,`EOR_ABSX:
 			begin
@@ -315,13 +329,15 @@ DECODE:
 				radr <= ir[55:24] + rfob;
 				Rt <= ir[19:16];
 				pc <= pc + 32'd7;
-				state <= LOAD1;			
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`ASL_ABSX,`ROL_ABSX,`LSR_ABSX,`ROR_ABSX,`INC_ABSX,`DEC_ABSX:
 			begin
 				radr <= ir[47:16] + rfob;
 				pc <= pc + 32'd6;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`CPX_IMM32:
 			begin
@@ -339,25 +355,29 @@ DECODE:
 			begin
 				radr <= dp + ir[23:12] + rfoa;
 				pc <= pc + 32'd3;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`CPY_ZPX:
 			begin
 				radr <= dp + ir[23:12] + rfoa;
 				pc <= pc + 32'd3;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`CPX_ABS:
 			begin
 				radr <= ir[39:8];
 				pc <= pc + 32'd5;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`CPY_ABS:
 			begin
 				radr <= ir[39:8];
 				pc <= pc + 32'd5;
-				state <= LOAD1;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
 			end
 		`BRK:
 			begin
@@ -374,6 +394,20 @@ DECODE:
 				vect <= {vbr[31:9],`BRK_VECTNO,2'b00};
 				state <= IRQ1;
 			end
+		`INT0,`INT1:
+			begin
+				radr <= isp_dec;
+				wadr <= isp_dec;
+				wdat <= pc + 32'd2;
+				cyc_o <= 1'b1;
+				stb_o <= 1'b1;
+				we_o <= 1'b1;
+				sel_o <= 4'hF;
+				adr_o <= {isp_dec,2'b00};
+				dat_o <= pc + 32'd2;
+				vect <= {vbr[31:9],ir[15:7],2'b00};
+				state <= IRQ1;
+			end
 		`JMP:
 			begin
 				pc[15:0] <= ir[23:8];
@@ -387,12 +421,14 @@ DECODE:
 		`JMP_IND:
 			begin
 				radr <= ir[39:8];
-				state <= JMP_IND1;
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
 			end
 		`JMP_INDX:
 			begin
 				radr <= ir[39:8] + x;
-				state <= JMP_IND1;
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
 			end
 		`JMP_RIND:
 			begin
@@ -487,11 +523,13 @@ DECODE:
 		`RTS,`RTL:
 				begin
 				radr <= isp;
-				state <= RTS1;
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
 				end
 		`RTI:	begin
 				radr <= isp;
-				state <= RTI1;
+				load_what <= `SR_310;
+				state <= LOAD_MAC1;
 				end
 		`BEQ,`BNE,`BPL,`BMI,`BCC,`BCS,`BVC,`BVS,`BRA:
 			begin
@@ -645,14 +683,16 @@ DECODE:
 		`PLP:
 			begin
 				radr <= isp;
-				state <= PLP1;
 				pc <= pc + 32'd1;
+				load_what <= `SR_310;
+				state <= LOAD_MAC1;
 			end
 		`PLA,`PLX,`PLY:
 			begin
 				radr <= isp;
 				isp <= isp_inc;
-				state <= PLA1;
+				load_what <= `WORD_311;
+				state <= LOAD_MAC1;
 				pc <= pc + 32'd1;
 			end
 		`POP:
@@ -660,10 +700,23 @@ DECODE:
 				Rt <= ir[15:12];
 				radr <= isp;
 				isp <= isp_inc;
-				state <= PLA1;
+				load_what <= `WORD_311;
+				state <= LOAD_MAC1;
 				pc <= pc + 32'd2;
 			end
 		default:	// unimplemented opcode
-			pc <= pc + 32'd1;
+			begin
+				radr <= isp_dec;
+				wadr <= isp_dec;
+				wdat <= pc + 32'd1;
+				cyc_o <= 1'b1;
+				stb_o <= 1'b1;
+				we_o <= 1'b1;
+				sel_o <= 4'hF;
+				adr_o <= {isp_dec,2'b00};
+				dat_o <= pc + 32'd1;
+				vect <= {vbr[31:9],9'd495,2'b00};
+				state <= IRQ1;
+			end	
 		endcase
 	end

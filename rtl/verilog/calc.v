@@ -37,8 +37,8 @@ CALC:
 			`ASL_RRR:	res <= shlo;
 			`LSR_RRR:	res <= shro;
 			endcase
-		`ADD_ZPX,`ADD_IX,`ADD_IY,`ADD_ABS,`ADD_ABSX,`ADD_RIND:	begin res <= a + b;	end
-		`SUB_ZPX,`SUB_IX,`SUB_IY,`SUB_ABS,`SUB_ABSX,`SUB_RIND:	begin res <= a - b;	end // Also CMP
+		`ADD_ZPX,`ADD_IX,`ADD_IY,`ADD_ABS,`ADD_ABSX,`ADD_RIND:	begin res <= a + b + {31'b0,df&cf};	end
+		`SUB_ZPX,`SUB_IX,`SUB_IY,`SUB_ABS,`SUB_ABSX,`SUB_RIND:	begin res <= a - b - {31'b0,df&~cf&|Rt};	end // Also CMP
 		`AND_ZPX,`AND_IX,`AND_IY,`AND_ABS,`AND_ABSX,`AND_RIND:	begin res <= a & b; end	// Also BIT
 		`OR_ZPX,`OR_IX,`OR_IY,`OR_ABS,`OR_ABSX,`OR_RIND:			begin res <= a | b; end	// Also LD
 		`EOR_ZPX,`EOR_IX,`EOR_IY,`EOR_ABS,`EOR_ABSX,`EOR_RIND:	begin res <= a ^ b; end

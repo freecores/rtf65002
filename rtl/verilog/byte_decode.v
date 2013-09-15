@@ -103,14 +103,23 @@ BYTE_DECODE:
 				res8 <= y8 - ir[15:8];
 			end
 		// Handle zp mode
-		`ADC_ZP,`SBC_ZP,`AND_ZP,`ORA_ZP,`EOR_ZP,`CMP_ZP,`LDA_ZP,
-		`LDX_ZP,`LDY_ZP,`BIT_ZP,`CPX_ZP,`CPY_ZP,
+		`LDX_ZP,`LDY_ZP,`LDA_ZP:
+			begin
+				pc <= pc + 32'd2;
+				radr <= zp_address[31:2];
+				radr2LSB <= zp_address[1:0];
+				load_what <= `BYTE_71;
+				state <= LOAD_MAC1;
+			end
+		`ADC_ZP,`SBC_ZP,`AND_ZP,`ORA_ZP,`EOR_ZP,`CMP_ZP,
+		`BIT_ZP,`CPX_ZP,`CPY_ZP,
 		`ASL_ZP,`ROL_ZP,`LSR_ZP,`ROR_ZP,`INC_ZP,`DEC_ZP,`TRB_ZP,`TSB_ZP:
 			begin
 				pc <= pc + 32'd2;
 				radr <= zp_address[31:2];
 				radr2LSB <= zp_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_70;
+				state <= LOAD_MAC1;
 			end
 		`STA_ZP:
 			begin
@@ -145,14 +154,23 @@ BYTE_DECODE:
 				state <= STORE1;
 			end
 		// Handle zp,x mode
-		`ADC_ZPX,`SBC_ZPX,`AND_ZPX,`ORA_ZPX,`EOR_ZPX,`CMP_ZPX,`LDA_ZPX,
-		`LDY_ZPX,`BIT_ZPX,
+		`LDY_ZPX,`LDA_ZPX:
+			begin
+				pc <= pc + 32'd2;
+				radr <= zpx_address[31:2];
+				radr2LSB <= zpx_address[1:0];
+				load_what <= `BYTE_71;
+				state <= LOAD_MAC1;
+			end
+		`ADC_ZPX,`SBC_ZPX,`AND_ZPX,`ORA_ZPX,`EOR_ZPX,`CMP_ZPX,
+		`BIT_ZPX,
 		`ASL_ZPX,`ROL_ZPX,`LSR_ZPX,`ROR_ZPX,`INC_ZPX,`DEC_ZPX:
 			begin
 				pc <= pc + 32'd2;
 				radr <= zpx_address[31:2];
 				radr2LSB <= zpx_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_70;
+				state <= LOAD_MAC1;
 			end
 		`STA_ZPX:
 			begin
@@ -184,7 +202,8 @@ BYTE_DECODE:
 				pc <= pc + 32'd2;
 				radr <= zpy_address[31:2];
 				radr2LSB <= zpy_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_71;
+				state <= LOAD_MAC1;
 			end
 		`STX_ZPY:
 			begin
@@ -200,7 +219,8 @@ BYTE_DECODE:
 				pc <= pc + 32'd2;
 				radr <= zpx_address[31:2];
 				radr2LSB <= zpx_address[1:0];
-				state <= BYTE_IX1;
+				load_what <= `IA_70;
+				state <= LOAD_MAC1;
 			end
 		// Handle (zp),y
 		`ADC_IY,`SBC_IY,`AND_IY,`ORA_IY,`EOR_IY,`CMP_IY,`LDA_IY,`STA_IY:
@@ -208,19 +228,29 @@ BYTE_DECODE:
 				pc <= pc + 32'd2;
 				radr <= zp_address[31:2];
 				radr2LSB <= zp_address[1:0];
-				state <= BYTE_IY1;
+				isIY <= `TRUE;
+				load_what <= `IA_70;
+				state <= LOAD_MAC1;
 			end
 		// Handle abs
-		`ADC_ABS,`SBC_ABS,`AND_ABS,`ORA_ABS,`EOR_ABS,`CMP_ABS,`LDA_ABS,
+		`LDA_ABS,`LDX_ABS,`LDY_ABS:
+			begin
+				pc <= pc + 32'd3;
+				radr <= abs_address[31:2];
+				radr2LSB <= abs_address[1:0];
+				load_what <= `BYTE_71;
+				state <= LOAD_MAC1;
+			end
+		`ADC_ABS,`SBC_ABS,`AND_ABS,`ORA_ABS,`EOR_ABS,`CMP_ABS,
 		`ASL_ABS,`ROL_ABS,`LSR_ABS,`ROR_ABS,`INC_ABS,`DEC_ABS,`TRB_ABS,`TSB_ABS,
-		`LDX_ABS,`LDY_ABS,
 		`CPX_ABS,`CPY_ABS,
 		`BIT_ABS:
 			begin
 				pc <= pc + 32'd3;
 				radr <= abs_address[31:2];
 				radr2LSB <= abs_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_70;
+				state <= LOAD_MAC1;
 			end
 		`STA_ABS:
 			begin
@@ -262,7 +292,8 @@ BYTE_DECODE:
 				pc <= pc + 32'd3;
 				radr <= absx_address[31:2];
 				radr2LSB <= absx_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_70;
+				state <= LOAD_MAC1;
 			end
 		`STA_ABSX:
 			begin
@@ -287,7 +318,8 @@ BYTE_DECODE:
 				pc <= pc + 32'd3;
 				radr <= absy_address[31:2];
 				radr2LSB <= absy_address[1:0];
-				state <= LOAD1;
+				load_what <= `BYTE_70;
+				state <= LOAD_MAC1;
 			end
 		`STA_ABSY:
 			begin
@@ -303,7 +335,8 @@ BYTE_DECODE:
 				pc <= pc + 32'd2;
 				radr <= zp_address[31:2];
 				radr2LSB <= zp_address[1:0];
-				state <= BYTE_IX1;
+				load_what <= `IA_70;
+				state <= LOAD_MAC1;
 			end
 		`BRK:
 			begin
@@ -340,13 +373,15 @@ BYTE_DECODE:
 			begin
 				radr <= abs_address[31:2];
 				radr2LSB <= abs_address[1:0];
-				state <= BYTE_JMP_IND1;
+				load_what <= `PC_70;
+				state <= LOAD_MAC1;
 			end
 		`JMP_INDX:
 			begin
 				radr <= absx_address[31:2];
 				radr2LSB <= absx_address[1:0];
-				state <= BYTE_JMP_IND1;
+				load_what <= `PC_70;
+				state <= LOAD_MAC1;
 			end	
 		`JSR:
 			begin
@@ -416,13 +451,15 @@ BYTE_DECODE:
 				radr <= {spage[31:8],sp_inc[7:2]};
 				radr2LSB <= sp_inc[1:0];
 				sp <= sp_inc;
-				state <= BYTE_RTS1;
+				load_what <= `PC_70;
+				state <= LOAD_MAC1;
 			end
 		`RTI:	begin
 				radr <= {spage[31:8],sp_inc[7:2]};
 				radr2LSB <= sp_inc[1:0];
 				sp <= sp_inc;
-				state <= BYTE_RTI9;
+				load_what <= `SR_70;
+				state <= LOAD_MAC1;
 				end
 		`BEQ,`BNE,`BPL,`BMI,`BCC,`BCS,`BVC,`BVS,`BRA:
 			begin
@@ -549,7 +586,8 @@ BYTE_DECODE:
 				radr <= {spage[31:8],sp_inc[7:2]};
 				radr2LSB <= sp_inc[1:0];
 				sp <= sp_inc;
-				state <= BYTE_PLP1;
+				load_what <= `SR_70;
+				state <= LOAD_MAC1;
 				pc <= pc + 32'd1;
 			end
 		`PLA,`PLX,`PLY:
@@ -557,7 +595,8 @@ BYTE_DECODE:
 				radr <= {spage[31:8],sp_inc[7:2]};
 				radr2LSB <= sp_inc[1:0];
 				sp <= sp_inc;
-				state <= PLA1;
+				load_what <= `BYTE_71;
+				state <= LOAD_MAC1;
 				pc <= pc + 32'd1;
 			end
 		default:	// unimplemented opcode

@@ -49,3 +49,10 @@ LOAD2:
 		b <= dat_i;
 		state <= em ? BYTE_CALC : CALC;
 	end
+	else if (err_i) begin
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'd0;
+		state <= BUS_ERROR;
+	end

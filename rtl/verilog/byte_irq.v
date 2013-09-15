@@ -25,6 +25,7 @@
 //
 BYTE_IRQ1:
 	if (ack_i) begin
+		ir <= 64'd0;
 		state <= BYTE_IRQ2;
 		retstate <= BYTE_IRQ2;
 		cyc_o <= 1'b0;

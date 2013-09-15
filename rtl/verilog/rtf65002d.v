@@ -32,6 +32,7 @@
 `define IRQ_VECT	34'h3FFFFFFF0
 `define BRK_VECTNO	9'd0
 `define SLP_VECTNO	9'd1
+`define BYTE_RST_VECT	34'h00000FFFC
 `define BYTE_NMI_VECT	34'h00000FFFA
 `define BYTE_IRQ_VECT	34'h00000FFFE
 
@@ -373,6 +374,24 @@
 `define BAZ			8'hC1
 `define BXZ			8'hD1
 `define BEQ_RR		8'hE2
+`define INT0		8'hDC
+`define INT1		8'hDD
+
+`define NOTHING		4'd0
+`define SR_70		4'd1
+`define SR_310		4'd2
+`define BYTE_70		4'd3
+`define WORD_310	4'd4
+`define PC_70		4'd5
+`define PC_158		4'd6
+`define PC_2316		4'd7
+`define PC_3124		4'd8
+`define PC_310		4'd9
+`define WORD_311	4'd10
+`define IA_310		4'd11
+`define IA_70		4'd12
+`define IA_158		4'd13
+`define BYTE_71		4'd14
 
 module icachemem(wclk, wr, adr, dat, rclk, pc, insn);
 input wclk;
@@ -381,7 +400,7 @@ input [33:0] adr;
 input [31:0] dat;
 input rclk;
 input [31:0] pc;
-output reg [55:0] insn;
+output reg [63:0] insn;
 
 wire [63:0] insn0;
 wire [63:0] insn1;
@@ -462,14 +481,14 @@ syncRam2kx32_1rw1r ramH1
 
 always @(rpc or insn0 or insn1)
 case(rpc[2:0])
-3'd0:	insn <= insn0[55:0];
-3'd1:	insn <= insn0[63:8];
-3'd2:	insn <= {insn1[7:0],insn0[63:16]};
-3'd3:	insn <= {insn1[15:0],insn0[63:24]};
-3'd4:	insn <= {insn1[23:0],insn0[63:32]};
-3'd5:	insn <= {insn1[31:0],insn0[63:40]};
-3'd6:	insn <= {insn1[39:0],insn0[63:48]};
-3'd7:	insn <= {insn1[47:0],insn0[63:56]};
+3'd0:	insn <= insn0[63:0];
+3'd1:	insn <= {insn1[7:0],insn0[63:8]};
+3'd2:	insn <= {insn1[15:0],insn0[63:16]};
+3'd3:	insn <= {insn1[23:0],insn0[63:24]};
+3'd4:	insn <= {insn1[31:0],insn0[63:32]};
+3'd5:	insn <= {insn1[39:0],insn0[63:40]};
+3'd6:	insn <= {insn1[47:0],insn0[63:48]};
+3'd7:	insn <= {insn1[55:0],insn0[63:56]};
 endcase 
 endmodule
 
@@ -613,7 +632,7 @@ assign v = (op ^ s ^ b) & (~op ^ a ^ b);
 endmodule
 
 
-module rtf65002d(rst_i, clk_i, nmi_i, irq_i, irq_vect, bte_o, cti_o, bl_o, lock_o, cyc_o, stb_o, ack_i, we_o, sel_o, adr_o, dat_i, dat_o);
+module rtf65002d(rst_md, rst_i, clk_i, nmi_i, irq_i, irq_vect, bte_o, cti_o, bl_o, lock_o, cyc_o, stb_o, ack_i, err_i, we_o, sel_o, adr_o, dat_i, dat_o);
 parameter IDLE = 3'd0;
 parameter LOAD_DCACHE = 3'd1;
 parameter LOAD_ICACHE = 3'd2;
@@ -723,7 +742,12 @@ parameter MULDIV1 = 7'd101;
 parameter MULDIV2 = 7'd102;
 parameter BYTE_DECODE = 7'd103;
 parameter BYTE_CALC = 7'd104;
+parameter BUS_ERROR = 7'd105;
+parameter INSN_BUS_ERROR = 7'd106;
+parameter LOAD_MAC1 = 7'd107;
+parameter LOAD_MAC2 = 7'd108;
 
+input rst_md;		// reset mode, 1=emulation mode, 0=native mode
 input rst_i;
 input clk_i;
 input nmi_i;
@@ -736,6 +760,7 @@ output reg lock_o;
 output reg cyc_o;
 output reg stb_o;
 input ack_i;
+input err_i;
 output reg we_o;
 output reg [3:0] sel_o;
 output reg [33:0] adr_o;
@@ -745,8 +770,8 @@ output reg [31:0] dat_o;
 reg [6:0] state;
 reg [6:0] retstate;
 reg [2:0] cstate;
-wire [55:0] insn;
-reg [55:0] ibuf;
+wire [63:0] insn;
+reg [63:0] ibuf;
 reg [31:0] bufadr;
 
 reg cf,nf,zf,vf,bf,im,df,em;
@@ -785,7 +810,7 @@ reg [31:0] abs8;	// 8 bit mode absolute address register
 reg [31:0] vbr;		// vector table base register
 wire bhit=pc==bufadr;
 reg [31:0] regfile [15:0];
-reg [55:0] ir;
+reg [63:0] ir;
 wire [3:0] Ra = ir[11:8];
 wire [3:0] Rb = ir[15:12];
 reg [31:0] rfoa;
@@ -849,6 +874,8 @@ reg [31:0] wadr;
 reg [1:0] wadr2LSB;
 reg [31:0] wdat;
 wire [31:0] rdat;
+reg [3:0] load_what;
+reg [3:0] store_what;
 reg imiss;
 reg dmiss;
 reg icacheOn,dcacheOn;
@@ -877,10 +904,13 @@ wire isRMW8 =
 wire isRMW = em ? isRMW8 : isRMW32;
 wire isOrb = ir[7:0]==`ORB_ZPX || ir[7:0]==`ORB_IX || ir[7:0]==`ORB_IY || ir[7:0]==`ORB_ABS || ir[7:0]==`ORB_ABSX;
 wire isStb = ir[7:0]==`STB_ZPX || ir[7:0]==`STB_ABS || ir[7:0]==`STB_ABSX;
-
+wire isRTI = ir[7:0]==`RTI;
+wire isRTL = ir[7:0]==`RTL;
+wire isRTS = ir[7:0]==`RTS;
 wire ld_muldiv = state==DECODE && ir[7:0]==`RR;
 wire md_done;
 wire clk;
+reg isIY;
 
 mult_div umd1
 (
@@ -1049,7 +1079,6 @@ if (rst_i) begin
 	wai <= 1'b0;
 	first_ifetch <= `TRUE;
 	wr <= 1'b0;
-	em <= 1'b0;
 	cf <= 1'b0;
 	ir <= 56'hEAEAEAEAEAEAEA;
 	imiss <= `FALSE;
@@ -1060,8 +1089,16 @@ if (rst_i) begin
 	nmoi <= 1'b1;
 	state <= RESET1;
 	cstate <= IDLE;
-	vect <= `RST_VECT;
-	pc <= 32'hFFFFFFF0;
+	if (rst_md) begin
+		pc <= 32'h0000FFF0;		// set high-order pc to zero
+		vect <= `BYTE_RST_VECT;
+		em <= 1'b1;
+	end
+	else begin
+		vect <= `RST_VECT;
+		em <= 1'b0;
+		pc <= 32'hFFFFFFF0;
+	end
 	spage <= 32'h00000100;
 	bufadr <= 32'd0;
 	dp <= 32'd0;
@@ -1071,6 +1108,7 @@ if (rst_i) begin
 	isCacheReset <= `TRUE;
 	gie <= 1'b0;
 	tick <= 32'd0;
+	isIY <= 1'b0;
 end
 else begin
 tick <= tick + 32'd1;
@@ -1090,95 +1128,22 @@ RESET1:
 	end
 RESET2:
 	begin
-		vect <= `RST_VECT;
 		radr <= vect[31:2];
-		state <= JMP_IND1;
+		radr2LSB <= vect[1:0];
+		load_what <= em ? `PC_70 : `PC_310;
+		state <= LOAD_MAC1;
 	end
 
 `include "ifetch.v"
 `include "decode.v"
 `include "byte_decode.v"
 
-`include "load.v"
+`include "load_mac.v"
 `include "store.v"
 
 WAIT_DHIT:
 	if (dhit)
 		state <= retstate;
-
-`include "byte_ix.v"
-`include "byte_iy.v"
-
-// Indirect and indirect X addressing mode eg. LDA ($12,x) : (zp)
-IX1:
-	if (unCachedData) begin
-		cyc_o <= 1'b1;
-		stb_o <= 1'b1;
-		sel_o <= 4'hf;
-		adr_o <= {radr,2'b00};
-		state <= IX2;
-	end
-	else if (dhit) begin
-		radr <= rdat;
-		wadr <= rdat;
-		wdat <= a;
-		if (ir[7:0]==`ST_IX)
-			state <= STORE1;
-		else
-			state <= LOAD1;
-	end
-	else
-		dmiss <= `TRUE;
-IX2:
-	if (ack_i) begin
-		cyc_o <= 1'b0;
-		stb_o <= 1'b0;
-		sel_o <= 4'h0;
-		adr_o <= 34'h0;
-		radr <= dat_i;
-		wadr <= dat_i;		// for stores
-		wdat <= a;
-		if (ir[7:0]==`ST_IX)
-			state <= STORE1;
-		else
-			state <= LOAD1;
-	end
-
-
-// Indirect Y addressing mode eg. LDA ($12),y
-IY1:
-	if (unCachedData) begin
-		cyc_o <= 1'b1;
-		stb_o <= 1'b1;
-		sel_o <= 4'hf;
-		adr_o <= {radr,2'b00};
-		state <= IY2;
-	end
-	else if (dhit) begin
-		radr <= rdat;
-		state <= IY3;
-	end
-	else
-		dmiss <= `TRUE;
-IY2:
-	if (ack_i) begin
-		cyc_o <= 1'b0;
-		stb_o <= 1'b0;
-		sel_o <= 4'h0;
-		adr_o <= 34'h0;
-		radr <= dat_i;
-		state <= IY3;
-	end
-IY3:
-	begin
-		radr <= radr + y;
-		wadr <= radr + y;
-		wdat <= a;
-		if (ir[7:0]==`ST_IY)
-			state <= STORE1;
-		else
-			state <= LOAD1;
-	end
 
 `include "byte_calc.v"
 `include "calc.v"
@@ -1209,8 +1174,9 @@ JSR1:
 
 JSR_INDX1:
 	if (ack_i) begin
-		state <= JMP_IND1;
-		retstate <= JMP_IND1;
+		load_what <= `PC_310;
+		state <= LOAD_MAC1;
+		retstate <= LOAD_MAC1;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -1249,21 +1215,12 @@ JSR161:
 		end
 	end
 
-`include "byte_plp.v"
-`include "byte_rts.v"
-`include "byte_rti.v"
-`include "rti.v"
-`include "rts.v"
-
 `include "php.v"
-`include "plp.v"
-`include "pla.v"
-
 `include "byte_irq.v"
-`include "byte_jmp_ind.v"
 
 IRQ1:
 	if (ack_i) begin
+		ir <= 64'd0;		// Force instruction decoder to BRK
 		state <= IRQ2;
 		retstate <= IRQ2;
 		cyc_o <= 1'b0;
@@ -1295,8 +1252,9 @@ IRQ2:
 	end
 IRQ3:
 	if (ack_i) begin
-		state <= JMP_IND1;
-		retstate <= JMP_IND1;
+		load_what <= `PC_310;
+		state <= LOAD_MAC1;
+		retstate <= LOAD_MAC1;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -1315,29 +1273,7 @@ IRQ3:
 			im <= 1'b1;
 		em <= 1'b0;			// make sure we process in native mode; we might have been called up during emulation mode
 	end
-JMP_IND1:
-	if (unCachedData) begin
-		cyc_o <= 1'b1;
-		stb_o <= 1'b1;
-		sel_o <= 4'hF;
-		adr_o <= {radr,2'b00};
-		state <= JMP_IND2;
-	end
-	else if (dhit) begin
-		pc <= rdat;
-		state <= IFETCH;
-	end
-	else
-		dmiss <= `TRUE;
-JMP_IND2:
-	if (ack_i) begin
-		cyc_o <= 1'b0;
-		stb_o <= 1'b0;
-		sel_o <= 4'h0;
-		adr_o <= 34'd0;
-		pc <= dat_i;
-		state <= IFETCH;
-	end
+
 MULDIV1:
 	state <= MULDIV2;
 MULDIV2:
@@ -1351,6 +1287,35 @@ MULDIV2:
 		`MOD_RR:	begin res <= r; end
 		`MODS_RR:	begin res <= r; end
 		endcase
+	end
+
+BUS_ERROR:
+	begin
+		radr <= isp_dec;
+		wadr <= isp_dec;
+		wdat <= pc;
+		cyc_o <= 1'b1;
+		stb_o <= 1'b1;
+		we_o <= 1'b1;
+		sel_o <= 4'hF;
+		adr_o <= {isp_dec,2'b00};
+		dat_o <= pc;
+		vect <= {vbr[31:9],9'd508,2'b00};
+		state <= IRQ1;
+	end
+INSN_BUS_ERROR:
+	begin
+		radr <= isp_dec;
+		wadr <= isp_dec;
+		wdat <= pc;
+		cyc_o <= 1'b1;
+		stb_o <= 1'b1;
+		we_o <= 1'b1;
+		sel_o <= 4'hF;
+		adr_o <= {isp_dec,2'b00};
+		dat_o <= pc;
+		vect <= {vbr[31:9],9'd509,2'b00};
+		state <= IRQ1;
 	end
 
 endcase

@@ -60,6 +60,16 @@ RTI2:
 		radr <= isp_inc;
 		state <= RTI3;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 RTI3:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -86,4 +96,14 @@ RTI4:
 		em <= em1;
 		pc <= dat_i;
 		state <= IFETCH;
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end

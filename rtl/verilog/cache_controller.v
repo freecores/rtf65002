@@ -89,6 +89,24 @@ LOAD_DCACHE:
 		end
 		adr_o <= adr_o + 34'd4;
 	end
+	// What to do here
+	else if (err_i) begin
+		if (adr_o[3:2]==2'b11) begin
+			dmiss <= `FALSE;
+			isDataCacheLoad <= `FALSE;
+			cti_o <= 3'b000;
+			bl_o <= 6'd0;
+			cyc_o <= 1'b0;
+			stb_o <= 1'b0;
+			sel_o <= 4'h0;
+			adr_o <= 34'h0;
+			cstate <= IDLE;
+			// The state machine will be waiting for a dhit.
+			// Override the next state and send the processor to the bus error state.
+			state <= BUS_ERROR;
+		end
+		adr_o <= adr_o + 34'd4;
+	end
 LOAD_ICACHE:
 	if (ack_i) begin
 		if (adr_o[3:2]==2'b11) begin
@@ -104,8 +122,23 @@ LOAD_ICACHE:
 		end
 		adr_o <= adr_o + 34'd4;
 	end
+	else if (err_i) begin
+		if (adr_o[3:2]==2'b11) begin
+			imiss <= `FALSE;
+			isInsnCacheLoad <= `FALSE;
+			cti_o <= 3'b000;
+			bl_o <= 6'd0;
+			cyc_o <= 1'b0;
+			stb_o <= 1'b0;
+			sel_o <= 4'h0;
+			adr_o <= 34'd0;
+			state <= INSN_BUS_ERROR;
+			cstate <= IDLE;
+		end
+		adr_o <= adr_o + 34'd4;
+	end
 LOAD_IBUF1:
-	if (ack_i) begin
+	if (ack_i|err_i) begin
 		case(pc[1:0])
 		2'd0:	ibuf <= dat_i;
 		2'd1:	ibuf <= dat_i[31:8];
@@ -116,7 +149,7 @@ LOAD_IBUF1:
 		adr_o <= adr_o + 34'd4;
 	end
 LOAD_IBUF2:
-	if (ack_i) begin
+	if (ack_i|err_i) begin
 		case(pc[1:0])
 		2'd0:	ibuf[55:32] <= dat_i[23:0];
 		2'd1:	ibuf[55:24] <= dat_i;
@@ -144,4 +177,23 @@ LOAD_IBUF3:
 		imiss <= `FALSE;
 		bufadr <= pc;	// clears the miss
 	end
+	else if (err_i) begin
+		case(pc[1:0])
+		2'd0:	;
+		2'd1:	;
+		2'd2:	ibuf[55:48] <= dat_i[7:0];
+		2'd3:	ibuf[55:40] <= dat_i[15:0];
+		endcase
+		cti_o <= 3'd0;
+		bl_o <= 6'd0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'd0;
+		cstate <= IDLE;
+		state <= INSN_BUS_ERROR;
+		imiss <= `FALSE;
+		bufadr <= pc;	// clears the miss
+	end
+
 endcase

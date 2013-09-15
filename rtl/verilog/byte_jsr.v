@@ -37,6 +37,16 @@ BYTE_JSR1:
 			dmiss <= `TRUE;
 		end
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_JSR2:
 	begin
 		radr <= {spage[31:8],sp[7:2]};
@@ -75,6 +85,16 @@ BYTE_JSR3:
 			state <= WAIT_DHIT;
 			dmiss <= `TRUE;
 		end
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end
 
 BYTE_JSR_INDX1:
@@ -117,8 +137,9 @@ BYTE_JSR_INDX2:
 	end
 BYTE_JSR_INDX3:
 	if (ack_i) begin
-		state <= BYTE_JMP_IND1;
-		retstate <= BYTE_JMP_IND1;
+		load_what <= `PC_70;
+		state <= LOAD_MAC1;
+		retstate <= LOAD_MAC1;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
@@ -135,4 +156,14 @@ BYTE_JSR_INDX3:
 			state <= WAIT_DHIT;
 			dmiss <= `TRUE;
 		end
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end

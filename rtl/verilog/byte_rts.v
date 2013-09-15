@@ -51,6 +51,16 @@ BYTE_RTS2:
 		pc[7:0] <= dati;
 		state <= BYTE_RTS3;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTS3:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -83,6 +93,16 @@ BYTE_RTS4:
 			sp <= sp_inc;
 		end
 		state <= BYTE_RTS5;
+	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
 	end
 BYTE_RTS5:
 	if (ir[7:0]!=`RTL) begin
@@ -119,6 +139,16 @@ BYTE_RTS6:
 		sp <= sp_inc;
 		state <= BYTE_RTS7;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTS7:
 	if (unCachedData) begin
 		cyc_o <= 1'b1;
@@ -142,8 +172,19 @@ BYTE_RTS8:
 		pc[31:24] <= dati;
 		state <= BYTE_RTS9;
 	end
+	else if (err_i) begin
+		lock_o <= 1'b0;
+		cyc_o <= 1'b0;
+		stb_o <= 1'b0;
+		we_o <= 1'b0;
+		sel_o <= 4'h0;
+		adr_o <= 34'h0;
+		dat_o <= 32'h0;
+		state <= BUS_ERROR;
+	end
 BYTE_RTS9:
 	begin
 		pc <= pc + 32'd1;
 		state <= IFETCH;
 	end
+
