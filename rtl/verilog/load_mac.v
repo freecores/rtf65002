@@ -308,13 +308,13 @@ LOAD_MAC2:
 				begin
 					radr <= radr34p1[33:2];
 					radr2LSB <= radr34p1[1:0];
-					ia[7:0] <= rdat8;
+					ia[7:0] <= dati;
 					load_what <= `IA_158;
 					state <= LOAD_MAC1;
 				end
 		`IA_158:
 				begin
-					ia[15:8] <= rdat8;
+					ia[15:8] <= dati;
 					ia[31:16] <= 16'h0000;
 					state <= isIY ? BYTE_IY5 : BYTE_IX5;
 				end
