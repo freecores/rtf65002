@@ -43,7 +43,6 @@ BYTE_JSR1:
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
 		sel_o <= 4'h0;
-		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end
@@ -92,7 +91,6 @@ BYTE_JSR3:
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
 		sel_o <= 4'h0;
-		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end
@@ -163,7 +161,6 @@ BYTE_JSR_INDX3:
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
 		sel_o <= 4'h0;
-		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end

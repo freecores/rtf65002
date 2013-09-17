@@ -43,7 +43,7 @@ DECODE:
 		`INY:	begin res <= y + 32'd1; pc <= pc + 32'd1; end
 		`DEA:	begin res <= acc - 32'd1; pc <= pc + 32'd1; end
 		`INA:	begin res <= acc + 32'd1; pc <= pc + 32'd1; end
-		`TSX:	begin res <= isp; pc <= pc + 32'd1; end
+		`TSX,`TSA:	begin res <= isp; pc <= pc + 32'd1; end
 		`TXS,`TXA,`TXY:	begin res <= x; pc <= pc + 32'd1; end
 		`TAX,`TAY,`TAS:	begin res <= acc; pc <= pc + 32'd1; end
 		`TYA,`TYX:	begin res <= y; pc <= pc + 32'd1; end
@@ -61,6 +61,7 @@ DECODE:
 						4'h6:	res <= dp8;
 						4'h7:	res <= abs8;
 						4'h8:	res <= {vbr[31:1],nmoi};
+						4'h9:	res <= derr_address;
 						4'hE:	res <= {spage[31:8],sp};
 						4'hF:	res <= isp;
 						endcase
@@ -125,6 +126,8 @@ DECODE:
 		`LDX_IMM16,`LDA_IMM16:	begin res <= {{16{ir[23]}},ir[23:8]}; pc <= pc + 32'd3; end
 		`LDX_IMM8,`LDA_IMM8: begin res <= {{24{ir[15]}},ir[15:8]}; pc <= pc + 32'd2; end
 
+		`SUB_SP:	begin res <= isp - {{24{ir[15]}},ir[15:8]}; pc <= pc + 32'd2; end
+
 		`LDX_ZPX,`LDY_ZPX:
 			begin
 				radr <= zpx32xy_address;
@@ -188,6 +191,13 @@ DECODE:
 				wadr <= zpx32_address[31:2];
 				wadr2LSB <= zpx32_address[1:0];
 				pc <= pc + 32'd4;
+				state <= STORE1;
+			end
+		`ST_DSP:
+			begin
+				wadr <= {{24{ir[23]}},ir[23:16]} + isp;
+				wdat <= rfoa;
+				pc <= pc + 32'd3;
 				state <= STORE1;
 			end
 		`ST_ABS:
@@ -260,6 +270,15 @@ DECODE:
 		`ASL_ZPX,`ROL_ZPX,`LSR_ZPX,`ROR_ZPX,`INC_ZPX,`DEC_ZPX:
 			begin
 				radr <= dp + rfoa + ir[23:12];
+				pc <= pc + 32'd3;
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
+			end
+		`ADD_DSP,`SUB_DSP,`OR_DSP,`AND_DSP,`EOR_DSP:
+			begin
+				a <= rfoa;
+				Rt <= ir[15:12];
+				radr <= {{24{ir[23]}},ir[23:16]} + isp;
 				pc <= pc + 32'd3;
 				load_what <= `WORD_310;
 				state <= LOAD_MAC1;
@@ -704,6 +723,8 @@ DECODE:
 				state <= LOAD_MAC1;
 				pc <= pc + 32'd2;
 			end
+		`MVN:	state <= MVN1;
+		`MVP:	state <= MVP1;
 		default:	// unimplemented opcode
 			begin
 				radr <= isp_dec;

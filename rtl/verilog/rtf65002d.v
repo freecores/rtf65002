@@ -100,6 +100,7 @@
 `define ADD_ABS		8'h6D
 `define ADD_ABSX	8'h7D
 `define ADD_RIND	8'h72
+`define ADD_DSP		8'h63
 
 `define SUB_IMM8	8'hE5
 `define SUB_IMM16	8'hF9
@@ -110,6 +111,7 @@
 `define SUB_ABS		8'hED
 `define SUB_ABSX	8'hFD
 `define SUB_RIND	8'hF2
+`define SUB_DSP		8'hE3
 
 // CMP = SUB r0,....
 
@@ -163,6 +165,7 @@
 `define AND_ABSY	8'h39
 `define AND_RIND	8'h32
 `define AND_I		8'h32
+`define AND_DSP		8'h23
 
 `define OR_IMM8		8'h05
 `define OR_IMM16	8'h19
@@ -173,6 +176,7 @@
 `define OR_ABS		8'h0D
 `define OR_ABSX		8'h1D
 `define OR_RIND		8'h12
+`define OR_DSP		8'h03
 
 `define ORA_IMM		8'h09
 `define ORA_ZP		8'h05
@@ -197,6 +201,7 @@
 `define EOR_ABSY	8'h59
 `define EOR_RIND	8'h52
 `define EOR_I		8'h52
+`define EOR_DSP		8'h43
 
 // LD is OR rt,r0,....
 
@@ -206,6 +211,7 @@
 `define ST_ABS		8'h8D
 `define ST_ABSX		8'h9D
 `define ST_RIND		8'h92
+`define ST_DSP		8'h83
 
 `define ORB_ZPX		8'hB5
 `define ORB_IX		8'hA1
@@ -376,6 +382,9 @@
 `define BEQ_RR		8'hE2
 `define INT0		8'hDC
 `define INT1		8'hDD
+`define SUB_SP		8'h4B
+`define MVP			8'h44
+`define MVN			8'h54
 
 `define NOTHING		4'd0
 `define SR_70		4'd1
@@ -392,6 +401,7 @@
 `define IA_70		4'd12
 `define IA_158		4'd13
 `define BYTE_71		4'd14
+`define WORD_312	4'd15
 
 module icachemem(wclk, wr, adr, dat, rclk, pc, insn);
 input wclk;
@@ -746,6 +756,11 @@ parameter BUS_ERROR = 7'd105;
 parameter INSN_BUS_ERROR = 7'd106;
 parameter LOAD_MAC1 = 7'd107;
 parameter LOAD_MAC2 = 7'd108;
+parameter MVN1 = 7'd109;
+parameter MVN2 = 7'd110;
+parameter MVN3 = 7'd111;
+parameter MVP1 = 7'd112;
+parameter MVP2 = 7'd113;
 
 input rst_md;		// reset mode, 1=emulation mode, 0=native mode
 input rst_i;
@@ -799,6 +814,7 @@ wire [7:0] sp_inc = sp + 8'd1;
 wire [31:0] isp_dec = isp - 32'd1;
 wire [31:0] isp_inc = isp + 32'd1;
 reg [31:0] pc;
+reg [31:0] opc;
 wire [31:0] pcp1 = pc + 32'd1;
 wire [31:0] pcp2 = pc + 32'd2;
 wire [31:0] pcp3 = pc + 32'd3;
@@ -876,6 +892,7 @@ reg [31:0] wdat;
 wire [31:0] rdat;
 reg [3:0] load_what;
 reg [3:0] store_what;
+reg [31:0] derr_address;
 reg imiss;
 reg dmiss;
 reg icacheOn,dcacheOn;
@@ -907,6 +924,7 @@ wire isStb = ir[7:0]==`STB_ZPX || ir[7:0]==`STB_ABS || ir[7:0]==`STB_ABSX;
 wire isRTI = ir[7:0]==`RTI;
 wire isRTL = ir[7:0]==`RTL;
 wire isRTS = ir[7:0]==`RTS;
+wire isMove = ir[7:0]==`MVP || ir[7:0]==`MVN;
 wire ld_muldiv = state==DECODE && ir[7:0]==`RR;
 wire md_done;
 wire clk;
@@ -1293,13 +1311,17 @@ BUS_ERROR:
 	begin
 		radr <= isp_dec;
 		wadr <= isp_dec;
-		wdat <= pc;
+		wdat <= opc;
+		if (em | isOrb | isStb)
+			derr_address <= adr_o[31:0];
+		else
+			derr_address <= adr_o[33:2];
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
 		we_o <= 1'b1;
 		sel_o <= 4'hF;
 		adr_o <= {isp_dec,2'b00};
-		dat_o <= pc;
+		dat_o <= opc;
 		vect <= {vbr[31:9],9'd508,2'b00};
 		state <= IRQ1;
 	end
@@ -1307,15 +1329,54 @@ INSN_BUS_ERROR:
 	begin
 		radr <= isp_dec;
 		wadr <= isp_dec;
-		wdat <= pc;
+		wdat <= opc;
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
 		we_o <= 1'b1;
 		sel_o <= 4'hF;
 		adr_o <= {isp_dec,2'b00};
-		dat_o <= pc;
+		dat_o <= opc;
 		vect <= {vbr[31:9],9'd509,2'b00};
 		state <= IRQ1;
+	end
+
+MVN1:
+	begin
+		radr <= x;
+		x <= x + 32'd1;
+		retstate <= MVN2;
+		load_what <= `WORD_312;
+		state <= LOAD_MAC1;
+	end
+MVN2:
+	begin
+		wadr <= y;
+		wdat <= b;
+		y <= y + 32'd1;
+		acc <= acc - 32'd1;
+		state <= STORE1;
+	end
+MVN3:
+	begin
+		state <= IFETCH;
+		if (acc==32'hFFFFFFFF)
+			pc <= pc + 32'd1;
+	end
+MVP1:
+	begin
+		radr <= x;
+		x <= x - 32'd1;
+		retstate <= MVP2;
+		load_what <= `WORD_312;
+		state <= LOAD_MAC1;
+	end
+MVP2:
+	begin
+		wadr <= y;
+		wdat <= b;
+		y <= y - 32'd1;
+		acc <= acc - 32'd1;
+		state <= STORE1;
 	end
 
 endcase

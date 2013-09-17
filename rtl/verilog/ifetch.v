@@ -22,6 +22,7 @@
 //
 IFETCH:
 	begin
+		opc <= pc;
 		if (nmi_edge & !imiss & gie) begin	// imiss indicates cache controller is active and this state is in a waiting loop
 			nmi_edge <= 1'b0;
 			wai <= 1'b0;
@@ -220,7 +221,7 @@ IFETCH:
 				case(ir[7:0])
 				`TAY,`TXY,`DEY,`INY:	begin y <= res; nf <= resn32; zf <= resz32; end
 				`TAX,`TYX,`TSX,`DEX,`INX:	begin x <= res; nf <= resn32; zf <= resz32; end
-				`TAS,`TXS:	begin isp <= res; gie <= 1'b1; end
+				`TAS,`TXS,`SUB_SP:	begin isp <= res; gie <= 1'b1; end
 				`TSA,`TYA,`TXA,`INA,`DEA:	begin acc <= res; nf <= resn32; zf <= resz32; end
 				`TRS:
 					begin

@@ -48,7 +48,10 @@ STORE1:
 // Clear any previously set lock status
 STORE2:
 	if (ack_i) begin
-		state <= IFETCH;
+		if (isMove)
+			state <= MVN3;
+		else
+			state <= IFETCH;
 		lock_o <= 1'b0;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
@@ -63,7 +66,10 @@ STORE2:
 		else if (write_allocate) begin
 			dmiss <= `TRUE;
 			state <= WAIT_DHIT;
-			retstate <= IFETCH;
+			if (isMove)
+				retstate <= MVN3;
+			else
+				retstate <= IFETCH;
 		end
 	end
 	else if (err_i) begin
@@ -72,7 +78,6 @@ STORE2:
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
 		sel_o <= 4'h0;
-		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end

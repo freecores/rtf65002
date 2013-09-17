@@ -43,6 +43,11 @@ LOAD_MAC1:
 						res <= rdat;
 						state <= IFETCH;
 					end
+		`WORD_312:
+				begin
+					b <= rdat;
+					state <= retstate;
+				end
 		`BYTE_70:
 				begin
 					b8 <= rdat8;
@@ -191,6 +196,11 @@ LOAD_MAC2:
 						res <= dat_i;
 						state <= IFETCH;
 					end
+		`WORD_312:
+				begin
+					b <= dat_i;
+					state <= retstate;
+				end
 		`BYTE_70:
 					begin
 						b8 <= dati;
@@ -326,7 +336,6 @@ LOAD_MAC2:
 		stb_o <= 1'b0;
 		we_o <= 1'b0;
 		sel_o <= 4'h0;
-		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end
