@@ -29,13 +29,14 @@ STORE1:
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
 		we_o <= 1'b1;
-		if (em || isStb)
+		if (em || isStb) begin
 			case(wadr2LSB)
 			2'd0:	sel_o <= 4'b0001;
 			2'd1:	sel_o <= 4'b0010;
 			2'd2:	sel_o <= 4'b0100;
 			2'd3:	sel_o <= 4'b1000;
 			endcase
+		end
 		else
 			sel_o <= 4'hf;
 		adr_o <= {wadr,2'b00};

@@ -344,7 +344,7 @@ BYTE_DECODE:
 				radr2LSB <= sp[1:0];
 				wadr <= {spage[31:8],sp[7:2]};
 				wadr2LSB <= sp[1:0];
-				wdat <= {4{pcp1[31:24]}};
+				wdat <= {4{pcp2[31:24]}};
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
@@ -355,7 +355,7 @@ BYTE_DECODE:
 				2'd3:	sel_o <= 4'b1000;
 				endcase
 				adr_o <= {spage[31:8],sp[7:2],2'b00};
-				dat_o <= {4{pcp1[31:24]}};
+				dat_o <= {4{pcp2[31:24]}};
 				sp <= sp_dec;
 				vect <= `BYTE_IRQ_VECT;
 				state <= BYTE_IRQ1;
@@ -516,7 +516,8 @@ BYTE_DECODE:
 				dat_o <= {4{sr8}};
 				wdat <= {4{sr8}};
 				sp <= sp_dec;
-				state <= PHP1;
+				state <= STORE2;
+				pc <= pc + 32'd1;
 			end
 		`PHA:
 			begin
@@ -537,7 +538,8 @@ BYTE_DECODE:
 				dat_o <= {4{acc8}};
 				wdat <= {4{acc8}};
 				sp <= sp_dec;
-				state <= PHP1;
+				state <= STORE2;
+				pc <= pc + 32'd1;
 			end
 		`PHX:
 			begin
@@ -558,7 +560,8 @@ BYTE_DECODE:
 				dat_o <= {4{x8}};
 				wdat <= {4{x8}};
 				sp <= sp_dec;
-				state <= PHP1;
+				state <= STORE2;
+				pc <= pc + 32'd1;
 			end
 		`PHY:
 			begin
@@ -579,7 +582,8 @@ BYTE_DECODE:
 				dat_o <= {4{y8}};
 				wdat <= {4{y8}};
 				sp <= sp_dec;
-				state <= PHP1;
+				pc <= pc + 32'd1;
+				state <= STORE2;
 			end
 		`PLP:
 			begin

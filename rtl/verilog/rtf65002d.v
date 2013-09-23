@@ -382,9 +382,13 @@
 `define BEQ_RR		8'hE2
 `define INT0		8'hDC
 `define INT1		8'hDD
-`define SUB_SP		8'h4B
+`define SUB_SP8		8'h85
+`define SUB_SP16	8'h99
+`define SUB_SP32	8'h89
 `define MVP			8'h44
 `define MVN			8'h54
+`define EXEC		8'hEB
+`define ATNI		8'h4B
 
 `define NOTHING		4'd0
 `define SR_70		4'd1
@@ -640,6 +644,49 @@ output v;
 assign v = (op ^ s ^ b) & (~op ^ a ^ b);
 
 endmodule
+/*
+// This table being setup to set the pc increment. It should synthesize to a ROM.
+module m_pcinc(opcode,inc);
+input [7:0] opcode;
+output [3:0] inc;
+
+always @(opcode)
+if (em)
+else
+case(opcode)
+`BRK:	inc <= 4'd1;
+`BPL,`BMI,`BCS,`BCC,`BVS,`BVC,`BEQ,`BNE,`BRA:	inc <= 4'd2;
+`BRL: inc <= 4'd3;
+`CLC,`SEC,`CLD,`SED,`CLV,`CLI,`SEI:	inc <= 4'd1;
+`TAS,`TSA,`TAY,`TYA,`TAX,`TXA,`TSX,`TXS,`TYX,`TXY:	inc <= 4'd1;
+`TRS,`TSR: inc <= 4'd2;
+`INY,`DEY,`INX,`DEX,`INA,`DEA: inc <= 4'd1;
+`EMM: inc <= 4'd1;
+`PHA,`PHX,`PHY,`PHP: inc <= 4'd1;
+`PLA,`PLX,`PLY,`PLP: inc <= 4'd1;
+`PUSH,`POP: inc <= 4'd2;
+`STP,`WAI: inc <= 4'd1;
+`JMP,`JSR: inc <= 4'd3;
+`JML,`JSL,`JMP_IND,`JMP_INDX,`JSR_INDX:	inc <= 4'd5;
+`JMP_RIND,`JSR_RIND: inc <= 4'd2;
+`RTS,`RTI,`RTL: inc <= 4'd1;
+`NOP: inc <= 4'd1;
+`BSR: inc <= 4'd3;
+`RR: inc <= 4'd3;
+`LD_RR:	inc <= 4'd2;
+`ADD_IMM8,`SUB_IMM8,`AND_IMM8,`OR_IMM8,`EOR_IMM8:	inc <= 4'd2;
+`ADD_IMM16,`SUB_IMM16,`AND_IMM16,`OR_IMM16,`EOR_IMM16:	inc <= 4'd3;
+`ADD_IMM32,`SUB_IMM32,`AND_IMM32,`OR_IMM32,`EOR_IMM32:	inc <= 4'd5;
+`ADD_ZPX,`SUB_ZPX,`AND_ZPX,`OR_ZPX,`EOR_ZPX: inc <= 4'd4;
+`ADD_IX,`SUB_IX,`AND_IX,`OR_IX,`EOR_IX: inc <= 4'd4;
+`ADD_IY,`SUB_IY,`AND_IY,`OR_IY,`EOR_IY: inc <= 4'd4;
+`ADD_ABS,`SUB_ABS,`AND_ABS,`OR_ABS,`EOR_ABS: inc <= 4'd6;
+`ADD_ABSX,`SUB_ABSX,`AND_ABSX,`OR_ABSX,`EOR_ABSX: inc <= 4'd7;
+`ADD_RIND,`SUB_RIND,`AND_RIND,`OR_RIND,`EOR_RIND: inc <= 4'd2;
+`ADD_DSP,`SUB_DSP,`AND_DSP,`OR_DSP,`EOR_DSP: inc <= 4'd3;
+endcase
+endmodule*/
+
 
 
 module rtf65002d(rst_md, rst_i, clk_i, nmi_i, irq_i, irq_vect, bte_o, cti_o, bl_o, lock_o, cyc_o, stb_o, ack_i, err_i, we_o, sel_o, adr_o, dat_i, dat_o);
@@ -666,7 +713,6 @@ parameter JSR1 = 7'd13;
 parameter JSR_INDX1 = 7'd14;
 parameter JSR161 = 7'd15;
 parameter RTS1 = 7'd16;
-parameter RTS2 = 7'd17;
 parameter IX1 = 7'd18;
 parameter IX2 = 7'd19;
 parameter IX3 = 7'd20;
@@ -674,25 +720,9 @@ parameter IX4 = 7'd21;
 parameter IY1 = 7'd22;
 parameter IY2 = 7'd23;
 parameter IY3 = 7'd24;
-parameter PHP1 = 7'd27;
-parameter PLP1 = 7'd28;
-parameter PLP2 = 7'd29;
-parameter PLA1 = 7'd30;
-parameter PLA2 = 7'd31;
 parameter BSR1 = 7'd32;
-parameter BYTE_IX1 = 7'd33;
-parameter BYTE_IX2 = 7'd34;
-parameter BYTE_IX3 = 7'd35;
-parameter BYTE_IX4 = 7'd36;
 parameter BYTE_IX5 = 7'd37;
-parameter BYTE_IY1 = 7'd38;
-parameter BYTE_IY2 = 7'd39;
-parameter BYTE_IY3 = 7'd40;
-parameter BYTE_IY4 = 7'd41;
 parameter BYTE_IY5 = 7'd42;
-parameter RTS3 = 7'd43;
-parameter RTS4 = 7'd44;
-parameter RTS5 = 7'd45;
 parameter BYTE_JSR1 = 7'd46;
 parameter BYTE_JSR2 = 7'd47;
 parameter BYTE_JSR3 = 7'd48;
@@ -788,10 +818,12 @@ reg [2:0] cstate;
 wire [63:0] insn;
 reg [63:0] ibuf;
 reg [31:0] bufadr;
+reg [63:0] exbuf;
 
 reg cf,nf,zf,vf,bf,im,df,em;
 reg em1;
 reg gie;
+reg hwi;	// hardware interrupt indicator
 reg nmoi;	// native mode on interrupt
 wire [31:0] sr = {nf,vf,em,24'b0,bf,df,im,zf,cf};
 wire [7:0] sr8 = {nf,vf,1'b0,bf,df,im,zf,cf};
@@ -813,13 +845,17 @@ wire [7:0] sp_dec = sp - 8'd1;
 wire [7:0] sp_inc = sp + 8'd1;
 wire [31:0] isp_dec = isp - 32'd1;
 wire [31:0] isp_inc = isp + 32'd1;
+reg [3:0] suppress_pcinc;
 reg [31:0] pc;
 reg [31:0] opc;
-wire [31:0] pcp1 = pc + 32'd1;
-wire [31:0] pcp2 = pc + 32'd2;
-wire [31:0] pcp3 = pc + 32'd3;
-wire [31:0] pcp4 = pc + 32'd4;
-wire [31:0] pcp8 = pc + 32'd8;
+wire [31:0] pcp1 = pc + (32'd1 & suppress_pcinc);
+wire [31:0] pcp2 = pc + (32'd2 & suppress_pcinc);
+wire [31:0] pcp3 = pc + (32'd3 & suppress_pcinc);
+wire [31:0] pcp4 = pc + (32'd4 & suppress_pcinc);
+wire [31:0] pcp5 = pc + (32'd5 & suppress_pcinc);
+wire [31:0] pcp6 = pc + (32'd6 & suppress_pcinc);
+wire [31:0] pcp7 = pc + (32'd7 & suppress_pcinc);
+wire [31:0] pcp8 = pc + (32'd8 & suppress_pcinc);
 reg [31:0] dp;		// 32 bit mode direct page register
 reg [31:0] dp8;		// 8 bit mode direct page register
 reg [31:0] abs8;	// 8 bit mode absolute address register
@@ -925,6 +961,8 @@ wire isRTI = ir[7:0]==`RTI;
 wire isRTL = ir[7:0]==`RTL;
 wire isRTS = ir[7:0]==`RTS;
 wire isMove = ir[7:0]==`MVP || ir[7:0]==`MVN;
+wire isExec = ir[7:0]==`EXEC;
+wire isAtni = ir[7:0]==`ATNI;
 wire ld_muldiv = state==DECODE && ir[7:0]==`RR;
 wire md_done;
 wire clk;
@@ -1048,11 +1086,11 @@ case(ir[7:0])
 default:	takb <= 1'b0;
 endcase
 
-wire [31:0] zpx_address = dp8 + ir[15:8] + x8;
-wire [31:0] zpy_address = dp8 + ir[15:8] + y8;
 wire [31:0] zp_address = dp8 + ir[15:8];
+wire [31:0] zpx_address = zp_address + x8;
+wire [31:0] zpy_address = zp_address + y8;
 wire [31:0] abs_address = abs8 + {16'h0,ir[23:8]};
-wire [31:0] absx_address = abs8 + {16'h0,ir[23:8] + {8'h0,x8}};
+wire [31:0] absx_address = abs8 + {16'h0,ir[23:8] + {8'h0,x8}};	// simulates 64k bank wrap-around
 wire [31:0] absy_address = abs8 + {16'h0,ir[23:8] + {8'h0,y8}};
 wire [31:0] zpx32xy_address = dp + ir[23:12] + rfoa;
 wire [31:0] absx32xy_address = ir[47:16] + rfob;
@@ -1117,6 +1155,8 @@ if (rst_i) begin
 		em <= 1'b0;
 		pc <= 32'hFFFFFFF0;
 	end
+	suppress_pcinc <= 4'hF;
+	exbuf <= 64'd0;
 	spage <= 32'h00000100;
 	bufadr <= 32'd0;
 	dp <= 32'd0;
@@ -1233,7 +1273,6 @@ JSR161:
 		end
 	end
 
-`include "php.v"
 `include "byte_irq.v"
 
 IRQ1:
@@ -1287,7 +1326,7 @@ IRQ3:
 			state <= WAIT_DHIT;
 		end
 		radr <= vect[31:2];
-		if (!bf)
+		if (hwi)
 			im <= 1'b1;
 		em <= 1'b0;			// make sure we process in native mode; we might have been called up during emulation mode
 	end
@@ -1323,6 +1362,7 @@ BUS_ERROR:
 		adr_o <= {isp_dec,2'b00};
 		dat_o <= opc;
 		vect <= {vbr[31:9],9'd508,2'b00};
+		hwi <= `TRUE;
 		state <= IRQ1;
 	end
 INSN_BUS_ERROR:
@@ -1337,9 +1377,10 @@ INSN_BUS_ERROR:
 		adr_o <= {isp_dec,2'b00};
 		dat_o <= opc;
 		vect <= {vbr[31:9],9'd509,2'b00};
+		hwi <= `TRUE;
 		state <= IRQ1;
 	end
-
+/*
 MVN1:
 	begin
 		radr <= x;
@@ -1350,6 +1391,7 @@ MVN1:
 	end
 MVN2:
 	begin
+		radr <= y;
 		wadr <= y;
 		wdat <= b;
 		y <= y + 32'd1;
@@ -1372,13 +1414,14 @@ MVP1:
 	end
 MVP2:
 	begin
+		radr <= y;
 		wadr <= y;
 		wdat <= b;
 		y <= y - 32'd1;
 		acc <= acc - 32'd1;
 		state <= STORE1;
 	end
-
+*/
 endcase
 
 `include "cache_controller.v"

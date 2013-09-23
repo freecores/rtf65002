@@ -22,11 +22,14 @@
 //
 IFETCH:
 	begin
+		suppress_pcinc <= 4'hF;				// default: no suppression of increment
 		opc <= pc;
-		if (nmi_edge & !imiss & gie) begin	// imiss indicates cache controller is active and this state is in a waiting loop
+		hwi <= `FALSE;
+		if (nmi_edge & !imiss & gie & !isExec & !isAtni) begin	// imiss indicates cache controller is active and this state is in a waiting loop
 			nmi_edge <= 1'b0;
 			wai <= 1'b0;
 			bf <= 1'b0;
+			hwi <= `TRUE;
 			if (em & !nmoi) begin
 				radr <= {spage[31:8],sp[7:2]};
 				radr2LSB <= sp[1:0];
@@ -62,12 +65,19 @@ IFETCH:
 				state <= IRQ1;
 			end
 		end
-		else if (irq_i && !imiss & gie) begin
+		else if (irq_i && !imiss & gie & !isExec & !isAtni) begin
 			if (im) begin
 				wai <= 1'b0;
-				if (unCachedInsn) begin
+				if (isExec) begin
+					ir <= exbuf;
+					exbuf <= 64'd0;
+					suppress_pcinc <= 4'h0;
+					state <= em ? BYTE_DECODE : DECODE;
+				end
+				else if (unCachedInsn) begin
 					if (bhit) begin
-						ir <= ibuf;
+						ir <= ibuf + exbuf;
+						exbuf <= 64'd0;
 						state <= em ? BYTE_DECODE : DECODE;
 					end
 					else
@@ -75,7 +85,8 @@ IFETCH:
 				end
 				else begin
 					if (ihit) begin
-						ir <= insn;
+						ir <= insn + exbuf;
+						exbuf <= 64'd0;
 						state <= em ? BYTE_DECODE : DECODE;
 					end
 					else
@@ -85,6 +96,7 @@ IFETCH:
 			else begin
 				bf <= 1'b0;
 				wai <= 1'b0;
+				hwi <= `TRUE;
 				if (em & !nmoi) begin
 					radr <= {spage[31:8],sp[7:2]};
 					radr2LSB <= sp[1:0];
@@ -122,9 +134,16 @@ IFETCH:
 			end
 		end
 		else if (!wai) begin
-			if (unCachedInsn) begin
+			if (isExec) begin
+				ir <= exbuf;
+				exbuf <= 64'd0;
+				suppress_pcinc <= 4'h0;
+				state <= em ? BYTE_DECODE : DECODE;
+			end
+			else if (unCachedInsn) begin
 				if (bhit) begin
-					ir <= ibuf;
+					ir <= ibuf + exbuf;
+					exbuf <= 64'd0;
 					state <= em ? BYTE_DECODE : DECODE;
 				end
 				else
@@ -132,7 +151,8 @@ IFETCH:
 			end
 			else begin
 				if (ihit) begin
-					ir <= insn;
+					ir <= insn + exbuf;
+					exbuf <= 64'd0;
 					state <= em ? BYTE_DECODE : DECODE;
 				end
 				else
@@ -221,7 +241,8 @@ IFETCH:
 				case(ir[7:0])
 				`TAY,`TXY,`DEY,`INY:	begin y <= res; nf <= resn32; zf <= resz32; end
 				`TAX,`TYX,`TSX,`DEX,`INX:	begin x <= res; nf <= resn32; zf <= resz32; end
-				`TAS,`TXS,`SUB_SP:	begin isp <= res; gie <= 1'b1; end
+				`TAS,`TXS:	begin isp <= res; gie <= 1'b1; end
+				`SUB_SP8,`SUB_SP16,`SUB_SP32:	isp <= res;
 				`TSA,`TYA,`TXA,`INA,`DEA:	begin acc <= res; nf <= resn32; zf <= resz32; end
 				`TRS:
 					begin

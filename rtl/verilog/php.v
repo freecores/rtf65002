@@ -31,7 +31,7 @@ PHP1:
 		sel_o <= 4'h0;
 		adr_o <= 34'd0;
 		dat_o <= 32'd0;
-		pc <= pc + 32'd1;	// <= this is different from STORE2
+//		pc <= pc + 32'd1;	// <= this is different from STORE2
 		if (dhit) begin
 			wr <= 1'b1;
 			wrsel <= sel_o;
