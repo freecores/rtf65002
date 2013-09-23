@@ -59,7 +59,7 @@ VARBGN		EQU		0x702
 LOPVAR		EQU		0x703
 STKGOS		EQU		0x704
 CURRNT		EQU		0x705
-BUFFER		EQU		0x406
+BUFFER		EQU		0x706
 BUFLEN		EQU		84
 LOPPT		EQU		0x760
 LOPLN		EQU		0x761
@@ -94,9 +94,11 @@ GOBYE:
 ; Modifiable system constants:
 ;
 		align	4
-TXTBGN	dw	0x04080000	;TXT		;beginning of program memory
-ENDMEM	dw	0x05FFDFF8	;	end of available memory
-STACKOFFS	dw	0x05FFDFF8	; stack offset - leave a little room for the BIOS
+;THRD_AREA	dw	0x04000000	; threading switch area 0x04000000-0x40FFFFF
+;bitmap dw	0x04100000	; bitmap graphics memory 0x04100000-0x417FFFF
+TXTBGN	dw	0x04180000	;TXT		;beginning of program memory
+ENDMEM	dw	0x057FFFFF	;	end of available memory
+STACKOFFS	dw	0x058FFFFF	; stack offset - leave a little room for the BIOS stacks
 ;
 ; The main interpreter starts here:
 ;
@@ -106,16 +108,18 @@ STACKOFFS	dw	0x05FFDFF8	; stack offset - leave a little room for the BIOS
 ; r12 = end of text in text buffer
 ;
 	align	4
+message "CSTART"
 public CSTART:
 	; First save off the link register and OS sp value
 	tsx
 	stx		OSSP
 	ldx		STACKOFFS>>2	; initialize stack pointer
 	txs
-	stz		CursorRow	; set screen output
-	stz		CursorCol
+	jsr		RequestIOFocus
+	jsr		HomeCursor
+	lda		#0				; turn off keyboard echoing
+	jsr		SetKeyboardEcho
 	stz		CursorFlash
-	stz		pos
 	ldx		#0x10000020	; black chars, yellow background
 ;	stx		charToPrint
 	jsr		ClearScreen
@@ -187,8 +191,22 @@ ST7:
 	ld		r1,r9		; r1 = pointer to next line
 	ld		r2,r13		; pointer to line to be deleted
 	ldy		TXTUNF		; points to top of save area
-	jsr		MVUP		; move up to delete
-	stx		TXTUNF		; update the end pointer
+	sub		r1,r3,r9	; r1 = length to move TXTUNF-pointer to next line
+;	dea					; count is one less
+	ld		r2,r9		; r2 = pointer to next line
+	ld		r3,r13		; r3 = pointer to line to delete
+	push	r4
+ST8:
+	ld		r4,(x)
+	st		r4,(y)
+	inx
+	iny
+	dea
+	bne		ST8
+	pop		r4
+;	mvn
+;	jsr		MVUP		; move up to delete
+	sty		TXTUNF		; update the end pointer
 	; we moved the lines of text after the line being
 	; deleted down, so the pointer to the next line
 	; needs to be reset
@@ -261,7 +279,7 @@ ST5:
 ; executed if none of the other table items are matched.
 ;
 ; Character-matching tables:
-
+message "TAB1"
 TAB1:
 	db	"LIS",'T'+0x80        ; Direct commands
 	db	"LOA",'D'+0x80
@@ -384,6 +402,7 @@ TAB10_1
 ; r9 = text table
 ; r10 = exec table
 ; r11 = trashed
+message "DIRECT"
 DIRECT:
 	ld		r9,#TAB1
 	ld		r10,#TAB1_1
@@ -423,14 +442,7 @@ EXMAT:
 EXGO:
 	; execute the appropriate routine
 	lb		r1,1,r10	; get the low mid order byte
-	asl	
-	asl
-	asl
-	asl
-	asl
-	asl
-	asl
-	asl
+	asl		r1,r1,#8
 	orb		r1,r1,0,r10	; get the low order byte
 	or		r1,r1,#$FFFF0000	; add in ROM base
 	jmp		(r1)
@@ -1419,7 +1431,7 @@ XP18:
 	rts
 
 ; <EXPR2>::=(+ or -)<EXPR3>(+ or -)<EXPR3>(...
-
+message "EXPR2"
 EXPR2:
 	ldy		#'-'
 	ld		r4,#XP21
@@ -2114,7 +2126,7 @@ MVDOWN:
 ; Note: a single zero word is stored on the stack in the
 ; case that no FOR loops need to be saved. This needs to be
 ; done because PUSHA / POPA is called all the time.
-
+message "POPA"
 POPA:
 	ply
 	pla
@@ -2244,10 +2256,10 @@ prCRLF:
 	jsr		GOOUT
 	rts
 
-; 'PRTNUM' prints the 32 bit number in r3, leading blanks are added if
-; needed to pad the number of spaces to the number in r4.
+; 'PRTNUM' prints the 32 bit number in r1, leading blanks are added if
+; needed to pad the number of spaces to the number in r2.
 ; However, if the number of digits is larger than the no. in
-; r4, all digits are printed anyway. Negative sign is also
+; r2, all digits are printed anyway. Negative sign is also
 ; printed and counted in, positive sign is not.
 ;
 ; r1 = number to print
@@ -2275,12 +2287,11 @@ PN1:
 	stx		(r7)		; and store in buffer
 	inc		r7
 	dec		r5			; decrement width
-	beq		PN6			; safty, prevents infinte loop on div fail
 	cmp		#0
 	bne		PN1
 PN6:
 	cmp		r5,r0
-	bcc		PN4		; test pad count, skip padding if not needed
+	bmi		PN4		; test pad count, skip padding if not needed
 	beq		PN4
 PN3:
 	lda		#' '		; display the required leading spaces
@@ -2534,6 +2545,7 @@ TOUPRET
 ; However, if a control-C is read, 'CHKIO' will warm-start BASIC and will
 ; not return to the caller.
 ;
+message "CHKIO"
 CHKIO:
 	jsr		GOIN		; get input if possible
 	cmp		#0
@@ -2607,11 +2619,15 @@ OUTC:
 ;	return Zero status if there's no character available).
 ;
 INCH:
-	jsr		KeybdCheckForKeyDirect
-	cmp		#0
+;	jsr		KeybdCheckForKeyDirect
+;	cmp		#0
+;	beq		INCH1
+	jsr		KeybdGetChar
+	cmp		#-1
 	beq		INCH1
-	jmp		KeybdGetCharDirect
+	rts
 INCH1:
+	ina		; return a zero for no-char
 	rts
 
 ;*
@@ -2638,8 +2654,7 @@ AUXOUT
 
 _cls
 	jsr		ClearScreen
-	stz		CursorRow
-	stz		CursorCol
+	jsr		HomeCursor
 	jmp		FINISH
 
 _wait10
@@ -2657,6 +2672,7 @@ rdcf6
 ; ===== Return to the resident monitor, operating system, etc.
 ;
 BYEBYE:
+	jsr		ReleaseIOFocus
 	ldx		OSSP
 	txs
 	rts
