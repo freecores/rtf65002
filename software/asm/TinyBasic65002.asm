@@ -48,34 +48,32 @@ CTRLX	EQU	0x18
 XON		EQU	0x11
 XOFF	EQU	0x13
 
-CursorRow	EQU		0x7C2
-CursorCol	EQU		0x7C3
-CursorFlash	EQU		0x7C4
-IRQFlag		EQU		0x7C6
+CursorFlash	EQU		0xFC4
+IRQFlag		EQU		0xFC6
 
-OSSP		EQU		0x700
-TXTUNF		EQU		0x701
-VARBGN		EQU		0x702
-LOPVAR		EQU		0x703
-STKGOS		EQU		0x704
-CURRNT		EQU		0x705
-BUFFER		EQU		0x706
+OSSP		EQU		0xF00
+TXTUNF		EQU		0xF01
+VARBGN		EQU		0xF02
+LOPVAR		EQU		0xF03
+STKGOS		EQU		0xF04
+CURRNT		EQU		0xF05
+BUFFER		EQU		0xF06
 BUFLEN		EQU		84
-LOPPT		EQU		0x760
-LOPLN		EQU		0x761
-LOPINC		EQU		0x762
-LOPLMT		EQU		0x763
-NUMWKA		EQU		0x764
-STKINP		EQU		0x774
-STKBOT		EQU		0x775
-usrJmp		EQU		0x776
-IRQROUT		EQU		0x777
+LOPPT		EQU		0xF60
+LOPLN		EQU		0xF61
+LOPINC		EQU		0xF62
+LOPLMT		EQU		0xF63
+NUMWKA		EQU		0xF64
+STKINP		EQU		0xF74
+STKBOT		EQU		0xF75
+usrJmp		EQU		0xF76
+IRQROUT		EQU		0xF77
 
 
 
 		cpu	rtf65002
 		code
-		org		$FFFFE800
+		org		$FFFFEC00
 GOSTART:	
 		jmp	CSTART	;	Cold Start entry point
 GOWARM:	
@@ -342,10 +340,10 @@ TAB10:
 ;
 TAB1_1:
 	dh	LISTX			;Direct commands
-	dh	LOAD
+	dh	LOAD3
 	dh	NEW
 	dh	RUN
-	dh	SAVE
+	dh	SAVE3
 TAB2_1:
 	dh	NEXT		;	Direct / statement
 	dh	LET
@@ -542,8 +540,6 @@ RUNSML                 ; RUN <same line>
 ; line, and jumps to 'RUNTSL' to do it.
 ;
 GOTO
-	lda		#'G'
-	jsr		DisplayChar
 	jsr		OREXPR		;evaluate the following expression
 	jsr		DisplayWord
 	ld      r5,r1
@@ -1127,7 +1123,51 @@ a2h1:
 	and		#15			; make sure a nybble
 	rts
 
+LOAD3:
+	jsr		spi_init
+	cmp		#0
+	bne		WSTART
+	lda		#5000
+	ldx		#$E00
+	jsr		spi_read_sector
+	lda		#5001
+	ldx		TXTBGN>>2
+	asl		r2,r2,#2
+LOAD4:
+	pha
+	jsr		spi_read_sector
+	add		r2,r2,#512
+	pla
+	ina
+	ld		r4,TXTBGN>>2
+	asl		r4,r4,#2
+	add		r4,r4,#65536
+	cmp		r2,r4
+	bmi		LOAD4
+	bra		WSTART
 
+SAVE3:
+	jsr		spi_init
+	cmp		#0
+	bne		WSTART
+	lda		#5000		; starting sector
+	ldx		#$E00		; starting address to write
+	jsr		spi_write_sector
+	lda		#5001
+	ldx		TXTBGN>>2
+	asl		r2,r2,#2
+SAVE4:
+	pha
+	jsr		spi_write_sector
+	add		r2,r2,#512
+	pla
+	ina
+	ld		r4,TXTBGN>>2
+	asl		r4,r4,#2
+	add		r4,r4,#65536
+	cmp		r2,r4
+	bmi		SAVE4
+	bra		WSTART
 
 SAVE:
 	ld		r8,TXTBGN>>2	;set pointer to start of prog. area
@@ -1889,8 +1929,6 @@ FI2:
 ;   r1
 ;
 ENDCHK:
-	lda		#'E'
-	jsr		DisplayChar
 	jsr		IGNBLK
 	lda		(r8)
 	cmp		#CR
