@@ -2,7 +2,7 @@
 //=============================================================================
 //	(C) 2013  Robert Finch
 //	All rights reserved.
-//	robfinch@Opencores.org
+//	robfinch<remove>@Opencores.org
 //
 //	RTF65002PIC.v
 //
@@ -49,6 +49,14 @@
 //	3	- write only
 //			this register enables the interrupt indicated
 //			by the low order four bits of the input data
+//
+//	4	- write only
+//			this register indicates which interrupt inputs are
+// 			edge sensitive
+//
+//  5	- write only
+//			This register resets the edge sense circuitry
+//			indicated by the low order four bits of the input data.
 //
 //	+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //	|WISHBONE Datasheet
@@ -113,6 +121,11 @@ parameter pIOAddress = 32'hFFDC_0FF0;
 reg [15:0] ie;		// interrupt enable register
 reg ack1;
 reg [3:0] irqenc;
+wire [15:0] i = {i15,i14,i13,i12,i11,i10,i9,i8,i7,i6,i5,i4,i3,i2,i1,nmii};
+reg [15:0] ib;
+reg [15:0] iedge;
+reg [15:0] rste;
+reg [15:0] es;
 
 wire cs = cyc_i && stb_i && adr_i[33:6]==pIOAddress[31:4];
 assign vol_o = cs;
@@ -123,17 +136,25 @@ assign ack_o = cs ? (we_i ? 1'b1 : ack1) : 1'b0;
 
 // write registers	
 always @(posedge clk_i)
-	if (rst_i)
+	if (rst_i) begin
 		ie <= 16'h0;
-	else if (cs & we_i)
-		case (adr_i[3:2])
-		2'd0,2'd1:
-			begin
-				ie[15:0] <= dat_i[15:0];
-			end
-		2'd2,2'd3:
-			ie[dat_i[3:0]] <= adr_i[2];
-		endcase
+		rste <= 16'h0;
+	end
+	else begin
+		rste <= 16'h0;
+		if (cs & we_i) begin
+			case (adr_i[4:2])
+			3'd0,3'd1:
+				begin
+					ie[15:0] <= dat_i[15:0];
+				end
+			3'd2,3'd3:
+				ie[dat_i[3:0]] <= adr_i[2];
+			3'd4:	es <= dat_i[15:0];
+			3'd5:	rste[dat_i[3:0]] <= 1'b1;
+			endcase
+		end
+	end
 
 // read registers
 always @(posedge clk_i)
@@ -152,28 +173,27 @@ end
 assign irqo = irqenc != 4'h0;
 assign nmio = nmii & ie[0];
 
-// irq requests are latched on every clock edge to prevent
+// Edge detect circuit
+integer n;
+always @(posedge clk_i)
+begin
+	for (n = 1; n < 16; n = n + 1)
+	begin
+		ib[n] <= i[n];
+		if (i[n] & !ib[n]) iedge[n] <= 1'b1;
+		if (rste[n]) iedge[n] <= 1'b0;
+	end
+end
+
+// irq requests are latched on every rising clock edge to prevent
 // misreads
 // nmi is not encoded
 always @(posedge clk_i)
-	case (1'b1)
-	i1&ie[1]:		irqenc <= 4'd1;
-	i2&ie[2]:		irqenc <= 4'd2;
-	i3&ie[3]: 		irqenc <= 4'd3;
-	i4&ie[4]:		irqenc <= 4'd4;
-	i5&ie[5]: 		irqenc <= 4'd5;
-	i6&ie[6]:		irqenc <= 4'd6;
-	i7&ie[7]:		irqenc <= 4'd7;
-	i8&ie[8]:		irqenc <= 4'd8;
-	i9&ie[9]:		irqenc <= 4'd9;
-	i10&ie[10]: 	irqenc <= 4'd10;
-	i11&ie[11]:		irqenc <= 4'd11;
-	i12&ie[12]:		irqenc <= 4'd12;
-	i13&ie[13]:		irqenc <= 4'd13;
-	i14&ie[14]:		irqenc <= 4'd14;
-	i15&ie[15]:		irqenc <= 4'd15;
-	default:	irqenc <= 4'd0;
-	endcase
+begin
+	irqenc <= 4'd0;
+	for (n = 15; n > 0; n = n - 1)
+		if (ie[n] & (es[n] ? iedge[n] : i[n])) irqenc <= n;
+end
 
 assign vecno = pVECNO|irqenc;
 

@@ -25,7 +25,6 @@
 //
 BYTE_IRQ1:
 	if (ack_i) begin
-		ir <= 64'd0;
 		state <= BYTE_IRQ2;
 		retstate <= BYTE_IRQ2;
 		cyc_o <= 1'b0;
@@ -178,8 +177,9 @@ BYTE_IRQ8:
 	end
 BYTE_IRQ9:
 	if (ack_i) begin
-		state <= BYTE_JMP_IND1;
-		retstate <= BYTE_JMP_IND1;
+		load_what <= `PC_70;
+		state <= LOAD_MAC1;
+		retstate <= LOAD_MAC1;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
 		we_o <= 1'b0;

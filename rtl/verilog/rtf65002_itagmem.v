@@ -17,23 +17,64 @@
 //                                                                          
 // You should have received a copy of the GNU General Public License        
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
-//                                                   
-// Extra state required for some datapath operations.                       
+//                                                                          
 // ============================================================================
 //
-CALC:
-	begin
-		state <= IFETCH;
-		res <= calc_res;
-		wadr <= radr; 			// These two lines for the shift/inc/dec ops
-		store_what <= `STW_CALC;
-		case(ir[7:0])
-		`ASL_ZPX,`ASL_ABS,`ASL_ABSX,
-		`ROL_ZPX,`ROL_ABS,`ROL_ABSX,
-		`LSR_ZPX,`LSR_ABS,`LSR_ABSX,
-		`ROR_ZPX,`ROR_ABS,`ROR_ABSX,
-		`INC_ZPX,`INC_ABS,`INC_ABSX,
-		`DEC_ZPX,`DEC_ABS,`DEC_ABSX:
-			state <= STORE1;
-		endcase
-	end
+module rtf65002_itagmem(wclk, wr, adr, rclk, pc, hit0, hit1);
+input wclk;
+input wr;
+input [33:0] adr;
+input rclk;
+input [31:0] pc;
+output hit0;
+output hit1;
+
+wire [31:0] pcp8 = pc + 32'd8;
+wire [31:0] tag0;
+wire [31:0] tag1;
+reg [31:0] rpc;
+reg [31:0] rpcp8;
+
+always @(posedge rclk)
+	rpc <= pc;
+always @(posedge rclk)
+	rpcp8 <= pcp8;
+
+syncRam1kx32_1rw1r ram0 (
+	.wrst(1'b0),
+	.wclk(wclk),
+	.wce(adr[3:2]==2'b11),
+	.we(wr),
+	.wsel(4'hF),
+	.wadr(adr[13:4]),
+	.i(adr[31:0]),
+	.wo(),
+
+	.rrst(1'b0),
+	.rclk(rclk),
+	.rce(1'b1),
+	.radr(pc[13:4]),
+	.o(tag0)
+);
+
+syncRam1kx32_1rw1r ram1 (
+	.wrst(1'b0),
+	.wclk(wclk),
+	.wce(adr[3:2]==2'b11),
+	.we(wr),
+	.wsel(4'hF),
+	.wadr(adr[13:4]),
+	.i(adr[31:0]),
+	.wo(),
+
+	.rrst(1'b0),
+	.rclk(rclk),
+	.rce(1'b1),
+	.radr(pcp8[13:4]),
+	.o(tag1)
+);
+
+assign hit0 = tag0[31:14]==rpc[31:14] && tag0[0];
+assign hit1 = tag1[31:14]==rpcp8[31:14] && tag1[0];
+
+endmodule

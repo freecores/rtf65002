@@ -21,7 +21,10 @@
 // ============================================================================
 //
 LOAD_MAC1:
-	if (unCachedData) begin
+`ifdef SUPPORT_DCACHE
+	if (unCachedData)
+`endif
+	begin
 		if (isRMW)
 			lock_o <= 1'b1;
 		cyc_o <= 1'b1;
@@ -30,6 +33,7 @@ LOAD_MAC1:
 		adr_o <= {radr,2'b00};
 		state <= LOAD_MAC2;
 	end
+`ifdef SUPPORT_DCACHE
 	else if (dhit) begin
 		case(load_what)
 		`WORD_310:
@@ -48,6 +52,7 @@ LOAD_MAC1:
 					b <= rdat;
 					state <= retstate;
 				end
+`ifdef SUPPORT_EM8
 		`BYTE_70:
 				begin
 					b8 <= rdat8;
@@ -58,6 +63,7 @@ LOAD_MAC1:
 					res8 <= rdat8;
 					state <= IFETCH;
 				end
+`endif
 		`SR_310:
 				begin
 					cf <= rdat[0];
@@ -75,6 +81,7 @@ LOAD_MAC1:
 					else	// PLP
 						state <= IFETCH;
 				end
+`ifdef SUPPORT_EM8
 		`SR_70:
 				begin
 					cf <= rdat8[0];
@@ -140,6 +147,7 @@ LOAD_MAC1:
 					else
 						state <= IFETCH;
 				end
+`endif
 		`PC_310:
 				begin
 					pc <= rdat;
@@ -161,6 +169,7 @@ LOAD_MAC1:
 						load_what <= `WORD_310;
 					end
 				end
+`ifdef SUPPORT_EM8
 		`IA_70:
 				begin
 					radr <= radr34p1[33:2];
@@ -174,10 +183,12 @@ LOAD_MAC1:
 					ia[31:16] <= 16'h0000;
 					state <= isIY ? BYTE_IY5 : BYTE_IX5;
 				end
+`endif
 		endcase
 	end
 	else
 		dmiss <= `TRUE;
+`endif
 LOAD_MAC2:
 	if (ack_i) begin
 		cyc_o <= 1'b0;
@@ -201,6 +212,7 @@ LOAD_MAC2:
 					b <= dat_i;
 					state <= retstate;
 				end
+`ifdef SUPPORT_EM8
 		`BYTE_70:
 					begin
 						b8 <= dati;
@@ -211,6 +223,7 @@ LOAD_MAC2:
 					res8 <= dati;
 					state <= IFETCH;
 				end
+`endif
 		`SR_310:	begin
 						cf <= dat_i[0];
 						zf <= dat_i[1];
@@ -229,6 +242,7 @@ LOAD_MAC2:
 						else	// PLP
 							state <= IFETCH;
 					end
+`ifdef SUPPORT_EM8
 		`SR_70:		begin
 						cf <= dati[0];
 						zf <= dati[1];
@@ -293,6 +307,7 @@ LOAD_MAC2:
 						else
 							state <= IFETCH;
 					end
+`endif
 		`PC_310:	begin
 						pc <= dat_i;
 						load_what <= `NOTHING;
@@ -314,6 +329,7 @@ LOAD_MAC2:
 						state <= LOAD_MAC1;
 					end
 				end
+`ifdef SUPPORT_EM8
 		`IA_70:
 				begin
 					radr <= radr34p1[33:2];
@@ -328,8 +344,10 @@ LOAD_MAC2:
 					ia[31:16] <= 16'h0000;
 					state <= isIY ? BYTE_IY5 : BYTE_IX5;
 				end
+`endif
 		endcase
 	end
+`ifdef SUPPORT_BERR
 	else if (err_i) begin
 		lock_o <= 1'b0;
 		cyc_o <= 1'b0;
@@ -339,6 +357,7 @@ LOAD_MAC2:
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end
+`endif
 RTS1:
 	begin
 		pc <= pc + 32'd1;
@@ -348,15 +367,17 @@ IY3:
 	begin
 		radr <= radr + y;
 		wadr <= radr + y;
-		wdat <= a;
-		if (ir[7:0]==`ST_IY)
+		if (ir[7:0]==`ST_IY) begin
+			store_what <= `STW_A;
 			state <= STORE1;
+		end
 		else begin
 			load_what <= `WORD_310;
 			state <= LOAD_MAC1;
 		end
 		isIY <= 1'b0;
 	end
+`ifdef SUPPORT_EM8
 BYTE_IX5:
 	begin
 		radr <= ia[31:2];
@@ -366,7 +387,7 @@ BYTE_IX5:
 		if (ir[7:0]==`STA_IX || ir[7:0]==`STA_I) begin
 			wadr <= ia[31:2];
 			wadr2LSB <= ia[1:0];
-			wdat <= {4{acc8}};
+			store_what <= `STW_ACC8;
 			state <= STORE1;
 		end
 	end
@@ -379,7 +400,7 @@ BYTE_IY5:
 		if (ir[7:0]==`STA_IY) begin
 			wadr <= iapy8[31:2];
 			wadr2LSB <= iapy8[1:0];
-			wdat <= {4{acc8}};
+			store_what <= `STW_ACC8;
 			state <= STORE1;
 		end
 		else begin
@@ -387,3 +408,4 @@ BYTE_IY5:
 			state <= LOAD_MAC1;
 		end
 	end
+`endif

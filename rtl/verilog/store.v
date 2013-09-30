@@ -40,8 +40,34 @@ STORE1:
 		else
 			sel_o <= 4'hf;
 		adr_o <= {wadr,2'b00};
-		dat_o <= wdat;
+		case(store_what)
+		`STW_ACC:	dat_o <= acc;
+		`STW_X:		dat_o <= x;
+		`STW_Y:		dat_o <= y;
+		`STW_PC:	dat_o <= pc;
+		`STW_PC2:	dat_o <= pc + 32'd2;
+		`STW_PCHWI:	dat_o <= pc+{30'b0,~hwi,1'b0};
+		`STW_SR:	dat_o <= sr;
+		`STW_RFA:	dat_o <= rfoa;
+		`STW_RFA8:	dat_o <= {4{rfoa[7:0]}};
+		`STW_A:		dat_o <= a;
+		`STW_B:		dat_o <= b;
+		`STW_CALC:	dat_o <= calc_res;
+`ifdef SUPPORT_EM8
+		`STW_ACC8:	dat_o <= {4{acc8}};
+		`STW_X8:	dat_o <= {4{x8}};
+		`STW_Y8:	dat_o <= {4{y8}};
+		`STW_PC3124:	dat_o <= {4{pc[31:24]}};
+		`STW_PC2316:	dat_o <= {4{pc[23:16]}};
+		`STW_PC158:		dat_o <= {4{pc[15:8]}};
+		`STW_PC70:		dat_o <= {4{pc[7:0]}};
+		`STW_SR70:		dat_o <= {4{sr8}};
+`endif
+		default:	dat_o <= wdat;
+		endcase
+`ifdef SUPPORT_DCACHE
 		radr <= wadr;		// Do a cache read to test the hit
+`endif
 		state <= STORE2;
 	end
 	
@@ -49,10 +75,15 @@ STORE1:
 // Clear any previously set lock status
 STORE2:
 	if (ack_i) begin
-		if (isMove)
+		wdat <= dat_o;
+		if (isMove|isSts) begin
 			state <= MVN3;
-		else
+			retstate <= MVN3;
+		end
+		else begin
 			state <= IFETCH;
+			retstate <= IFETCH;
+		end
 		lock_o <= 1'b0;
 		cyc_o <= 1'b0;
 		stb_o <= 1'b0;
@@ -60,6 +91,52 @@ STORE2:
 		sel_o <= 4'h0;
 		adr_o <= 34'h0;
 		dat_o <= 32'h0;
+		case(store_what)
+		`STW_PC,`STW_PC2,`STW_PCHWI:
+			if (isBrk) begin
+				radr <= isp_dec;
+				wadr <= isp_dec;
+				isp <= isp_dec;
+				store_what <= `STW_SR;
+				state <= STORE1;
+				retstate <= STORE1;
+			end
+		`STW_SR:
+			if (isBrk) begin
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
+				retstate <= LOAD_MAC1;
+				radr <= vect[31:2];
+				if (hwi)
+					im <= 1'b1;
+				em <= 1'b0;			// make sure we process in native mode; we might have been called up during emulation mode
+			end
+`ifdef SUPPORT_EM8
+		`STW_PC3124:
+			begin
+				store_what <= `STW_PC2316;
+				state <= STORE1;
+			end
+		`STW_PC2316:
+			begin
+				store_what <= `STW_PC158;
+				state <= STORE1;
+			end
+		`STW_PC158:
+			begin
+				store_what <= `STW_PC70;
+				state <= STORE1;
+			end
+		`STW_PC70:
+			begin
+				if (ir[7:0]==`BRK) begin
+					store_what <= `STW_SR70;
+					state <= STORE1;
+				end
+			end
+`endif
+		endcase
+`ifdef SUPPORT_DCACHE
 		if (dhit) begin
 			wrsel <= sel_o;
 			wr <= 1'b1;
@@ -67,12 +144,10 @@ STORE2:
 		else if (write_allocate) begin
 			dmiss <= `TRUE;
 			state <= WAIT_DHIT;
-			if (isMove)
-				retstate <= MVN3;
-			else
-				retstate <= IFETCH;
 		end
+`endif
 	end
+`ifdef SUPPORT_BERR
 	else if (err_i) begin
 		lock_o <= 1'b0;
 		cyc_o <= 1'b0;
@@ -82,5 +157,6 @@ STORE2:
 		dat_o <= 32'h0;
 		state <= BUS_ERROR;
 	end
+`endif
 
 	

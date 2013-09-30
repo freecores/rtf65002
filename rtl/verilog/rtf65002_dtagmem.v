@@ -17,23 +17,40 @@
 //                                                                          
 // You should have received a copy of the GNU General Public License        
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
-//                                                   
-// Extra state required for some datapath operations.                       
+//                                                                          
 // ============================================================================
 //
-CALC:
-	begin
-		state <= IFETCH;
-		res <= calc_res;
-		wadr <= radr; 			// These two lines for the shift/inc/dec ops
-		store_what <= `STW_CALC;
-		case(ir[7:0])
-		`ASL_ZPX,`ASL_ABS,`ASL_ABSX,
-		`ROL_ZPX,`ROL_ABS,`ROL_ABSX,
-		`LSR_ZPX,`LSR_ABS,`LSR_ABSX,
-		`ROR_ZPX,`ROR_ABS,`ROR_ABSX,
-		`INC_ZPX,`INC_ABS,`INC_ABSX,
-		`DEC_ZPX,`DEC_ABS,`DEC_ABSX:
-			state <= STORE1;
-		endcase
-	end
+module rtf65002_dtagmem(wclk, wr, wadr, rclk, radr, hit);
+input wclk;
+input wr;
+input [31:0] wadr;
+input rclk;
+input [31:0] radr;
+output hit;
+
+reg [31:0] rradr;
+wire [31:0] tag;
+
+syncRam512x32_1rw1r u1
+	(
+		.wrst(1'b0),
+		.wclk(wclk),
+		.wce(wadr[1:0]==2'b11),
+		.we(wr),
+		.wadr(wadr[10:2]),
+		.i(wadr),
+		.wo(),
+		.rrst(1'b0),
+		.rclk(rclk),
+		.rce(1'b1),
+		.radr(radr[10:2]),
+		.o(tag)
+	);
+
+
+always @(posedge rclk)
+	rradr <= radr;
+	
+assign hit = tag[31:11]==rradr[31:11];
+
+endmodule

@@ -23,6 +23,8 @@
 //                                                                          
 // ============================================================================
 //
+`define SUPPORT_DIVMOD		1'b1
+
 `define MUL		4'd8
 `define MULS	4'd9
 `define DIV		4'd10
@@ -79,6 +81,7 @@ IDLE:
 				res_sgn <= a[31] ^ b[31];
 				state <= MULT;
 			end
+`ifdef SUPPORT_DIVMOD
 		`DIV,`MOD:
 			begin
 				aa <= a;
@@ -97,6 +100,7 @@ IDLE:
 				res_sgn <= a[31] ^ b[31];
 				state <= DIV;
 			end
+`endif
 		default:
 			state <= IDLE;
 		endcase
@@ -106,6 +110,7 @@ MULT:
 		state <= res_sgn ? FIX_SIGN : IDLE;
 		p <= aa * bb;
 	end
+`ifdef SUPPORT_DIVMOD
 DIV:
 	begin
 		q <= {q[30:0],~diff[31]};
@@ -124,6 +129,7 @@ DIV:
 		end
 		cnt <= cnt - 6'd1;
 	end
+`endif
 
 FIX_SIGN:
 	begin

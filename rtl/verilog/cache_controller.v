@@ -27,6 +27,7 @@ case(cstate)
 IDLE:
 	begin
 		if (!cyc_o) begin
+`ifdef SUPPORT_DCACHE
 			// A write to a cacheable address does not cause a cache load
 			if (dmiss) begin
 				isDataCacheLoad <= `TRUE;
@@ -40,7 +41,10 @@ IDLE:
 				adr_o <= {radr[31:2],4'h0};
 				cstate <= LOAD_DCACHE;
 			end
-			else if (!unCachedInsn && imiss && !hit0) begin
+			else
+`endif
+`ifdef SUPPORT_ICACHE
+			if (!unCachedInsn && imiss && !hit0) begin
 				isInsnCacheLoad <= `TRUE;
 				bte_o <= 2'b00;
 				cti_o <= 3'd001;
@@ -62,7 +66,9 @@ IDLE:
 				adr_o <= {pcp8[31:4],4'h0};
 				cstate <= LOAD_ICACHE;
 			end
-			else if (unCachedInsn && imiss) begin
+			else 
+`endif
+			if (unCachedInsn && imiss) begin
 				bte_o <= 2'b00;
 				cti_o <= 3'b001;
 				bl_o <= 6'd2;
@@ -74,6 +80,7 @@ IDLE:
 			end
 		end
 	end
+`ifdef SUPPORT_DCACHE
 LOAD_DCACHE:
 	if (ack_i) begin
 		if (adr_o[3:2]==2'b11) begin
@@ -90,6 +97,7 @@ LOAD_DCACHE:
 		adr_o <= adr_o + 34'd4;
 	end
 	// What to do here
+`ifdef SUPPORT_BERR
 	else if (err_i) begin
 		if (adr_o[3:2]==2'b11) begin
 			dmiss <= `FALSE;
@@ -107,6 +115,9 @@ LOAD_DCACHE:
 		end
 		adr_o <= adr_o + 34'd4;
 	end
+`endif
+`endif
+`ifdef SUPPORT_ICACHE
 LOAD_ICACHE:
 	if (ack_i) begin
 		if (adr_o[3:2]==2'b11) begin
@@ -122,6 +133,7 @@ LOAD_ICACHE:
 		end
 		adr_o <= adr_o + 34'd4;
 	end
+`ifdef SUPPORT_BERR
 	else if (err_i) begin
 		if (adr_o[3:2]==2'b11) begin
 			imiss <= `FALSE;
@@ -137,6 +149,8 @@ LOAD_ICACHE:
 		end
 		adr_o <= adr_o + 34'd4;
 	end
+`endif
+`endif
 LOAD_IBUF1:
 	if (ack_i|err_i) begin
 		case(pc[1:0])
@@ -177,6 +191,7 @@ LOAD_IBUF3:
 		imiss <= `FALSE;
 		bufadr <= pc;	// clears the miss
 	end
+`ifdef SUPPORT_BERR
 	else if (err_i) begin
 		case(pc[1:0])
 		2'd0:	;
@@ -195,5 +210,6 @@ LOAD_IBUF3:
 		imiss <= `FALSE;
 		bufadr <= pc;	// clears the miss
 	end
+`endif
 
 endcase

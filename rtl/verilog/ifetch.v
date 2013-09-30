@@ -22,52 +22,31 @@
 //
 IFETCH:
 	begin
+		if (em)
+			vect <= `BYTE_IRQ_VECT;
+		else
+			vect <= {vbr[31:9],`BRK_VECTNO,2'b00};
 		suppress_pcinc <= 4'hF;				// default: no suppression of increment
 		opc <= pc;
 		hwi <= `FALSE;
+		store_what <= `STW_DEF;
 		if (nmi_edge & !imiss & gie & !isExec & !isAtni) begin	// imiss indicates cache controller is active and this state is in a waiting loop
+			ir <= 64'd0;
 			nmi_edge <= 1'b0;
 			wai <= 1'b0;
-			bf <= 1'b0;
 			hwi <= `TRUE;
 			if (em & !nmoi) begin
-				radr <= {spage[31:8],sp[7:2]};
-				radr2LSB <= sp[1:0];
-				wadr <= {spage[31:8],sp[7:2]};
-				wadr2LSB <= sp[1:0];
-				wdat <= {4{pc[31:24]}};
-				cyc_o <= 1'b1;
-				stb_o <= 1'b1;
-				we_o <= 1'b1;
-				case(sp[1:0])
-				2'd0:	sel_o <= 4'b0001;
-				2'd1:	sel_o <= 4'b0010;
-				2'd2:	sel_o <= 4'b0100;
-				2'd3:	sel_o <= 4'b1000;
-				endcase
-				adr_o <= {spage[31:8],sp[7:2],2'b00};
-				dat_o <= {4{pc[31:24]}};
-				sp <= sp_dec;
 				vect <= `BYTE_NMI_VECT;
-				state <= BYTE_IRQ1;
+				state <= BYTE_DECODE;
 			end
 			else begin
-				radr <= isp_dec;
-				wadr <= isp_dec;
-				wdat <= pc;
-				cyc_o <= 1'b1;
-				stb_o <= 1'b1;
-				we_o <= 1'b1;
-				sel_o <= 4'hF;
-				adr_o <= {isp_dec,2'b00};
-				dat_o <= pc;
+				state <= DECODE;
 				vect <= `NMI_VECT;
-				state <= IRQ1;
 			end
 		end
 		else if (irq_i && !imiss & gie & !isExec & !isAtni) begin
+			wai <= 1'b0;
 			if (im) begin
-				wai <= 1'b0;
 				if (isExec) begin
 					ir <= exbuf;
 					exbuf <= 64'd0;
@@ -94,42 +73,14 @@ IFETCH:
 				end
 			end
 			else begin
-				bf <= 1'b0;
-				wai <= 1'b0;
+				ir <= 64'd0;
 				hwi <= `TRUE;
 				if (em & !nmoi) begin
-					radr <= {spage[31:8],sp[7:2]};
-					radr2LSB <= sp[1:0];
-					wadr <= {spage[31:8],sp[7:2]};
-					wadr2LSB <= sp[1:0];
-					wdat <= {4{pc[31:24]}};
-					cyc_o <= 1'b1;
-					stb_o <= 1'b1;
-					we_o <= 1'b1;
-					case(sp[1:0])
-					2'd0:	sel_o <= 4'b0001;
-					2'd1:	sel_o <= 4'b0010;
-					2'd2:	sel_o <= 4'b0100;
-					2'd3:	sel_o <= 4'b1000;
-					endcase
-					adr_o <= {spage[31:8],sp[7:2],2'b00};
-					dat_o <= {4{pc[31:24]}};
-					sp <= sp_dec;
-					vect <= `BYTE_IRQ_VECT;
-					state <= BYTE_IRQ1;
+					state <= BYTE_DECODE;
 				end
 				else begin
-					radr <= isp_dec;
-					wadr <= isp_dec;
-					wdat <= pc;
-					cyc_o <= 1'b1;
-					stb_o <= 1'b1;
-					we_o <= 1'b1;
-					sel_o <= 4'hF;
-					adr_o <= {isp_dec,2'b00};
-					dat_o <= pc;
 					vect <= {vbr[31:9],irq_vect,2'b00};
-					state <= IRQ1;
+					state <= DECODE;
 				end
 			end
 		end
@@ -161,6 +112,11 @@ IFETCH:
 		end
 		if (first_ifetch) begin
 			first_ifetch <= `FALSE;
+			if (hist_capture) begin
+				history_buf[history_ndx] <= pc;
+				history_ndx <= history_ndx+6'd1;
+			end
+`ifdef SUPPORT_EM8
 			if (em) begin
 				case(ir[7:0])
 				`TAY,`TXY,`DEY,`INY:	begin y[7:0] <= res8; nf <= resn8; zf <= resz8; end
@@ -230,7 +186,9 @@ IFETCH:
 				`LDY_IMM,`LDY_ZP,`LDY_ZPX,`LDY_ABS,`LDY_ABSX:	begin y[7:0] <= res8; nf <= resn8; zf <= resz8; end
 				endcase
 			end
-			else begin
+			else
+`endif
+			begin
 				regfile[Rt] <= res;
 				case(Rt)
 				4'h1:	acc <= res;
@@ -239,23 +197,22 @@ IFETCH:
 				default:	;
 				endcase
 				case(ir[7:0])
-				`TAY,`TXY,`DEY,`INY:	begin y <= res; nf <= resn32; zf <= resz32; end
-				`TAX,`TYX,`TSX,`DEX,`INX:	begin x <= res; nf <= resn32; zf <= resz32; end
 				`TAS,`TXS:	begin isp <= res; gie <= 1'b1; end
 				`SUB_SP8,`SUB_SP16,`SUB_SP32:	isp <= res;
-				`TSA,`TYA,`TXA,`INA,`DEA:	begin acc <= res; nf <= resn32; zf <= resz32; end
 				`TRS:
 					begin
 						case(ir[15:12])
 						4'h0:	begin
 								$display("res=%h",res);
+`ifdef SUPPORT_ICACHE
 								icacheOn <= res[0];
+`endif
+`ifdef SUPPORT_DCACHE
 								dcacheOn <= res[1];
 								write_allocate <= res[2];
+`endif
 								end
-						4'h1:	dp <= res;
 						4'h5:	lfsr <= res;
-						4'h6:	dp8 <= res;
 						4'h7:	abs8 <= res;
 						4'h8:	begin vbr <= {res[31:9],9'h000}; nmoi <= res[0]; end
 						4'hE:	begin sp <= res[7:0]; spage[31:8] <= res[31:8]; end
@@ -275,20 +232,11 @@ IFETCH:
 							begin nf <= b[31]; vf <= b[30]; zf <= resz32; end
 						else
 							begin nf <= resn32; zf <= resz32; end
-					`OR_RR:	begin nf <= resn32; zf <= resz32; end
-					`EOR_RR:	begin nf <= resn32; zf <= resz32; end
-					`MUL_RR:	begin nf <= resn32; zf <= resz32; end
-					`MULS_RR:	begin nf <= resn32; zf <= resz32; end
-					`DIV_RR:	begin nf <= resn32; zf <= resz32; end
-					`DIVS_RR:	begin nf <= resn32; zf <= resz32; end
-					`MOD_RR:	begin nf <= resn32; zf <= resz32; end
-					`MODS_RR:	begin nf <= resn32; zf <= resz32; end
-					`ASL_RRR:	begin nf <= resn32; zf <= resz32; end
-					`LSR_RRR:	begin nf <= resn32; zf <= resz32; end
+					default:
+							begin nf <= resn32; zf <= resz32; end
 					endcase
 				`LD_RR:	begin zf <= resz32; nf <= resn32; end
 				`DEC_RR,`INC_RR: begin zf <= resz32; nf <= resn32; end
-				`ASL_RR,`ROL_RR,`LSR_RR,`ROR_RR: begin cf <= resc32; nf <= resn32; zf <= resz32; end
 				`ADD_IMM8,`ADD_IMM16,`ADD_IMM32,`ADD_ZPX,`ADD_IX,`ADD_IY,`ADD_ABS,`ADD_ABSX,`ADD_RIND:
 					begin vf <= resv32; cf <= resc32; nf <= resn32; zf <= resz32; end
 				`SUB_IMM8,`SUB_IMM16,`SUB_IMM32,`SUB_ZPX,`SUB_IX,`SUB_IY,`SUB_ABS,`SUB_ABSX,`SUB_RIND:
@@ -305,27 +253,30 @@ IFETCH:
 				`OR_IMM8,`OR_IMM16,`OR_IMM32,`OR_ZPX,`OR_IX,`OR_IY,`OR_ABS,`OR_ABSX,`OR_RIND,
 				`EOR_IMM8,`EOR_IMM16,`EOR_IMM32,`EOR_ZPX,`EOR_IX,`EOR_IY,`EOR_ABS,`EOR_ABSX,`EOR_RIND:
 					begin nf <= resn32; zf <= resz32; end
-				`ASL_ACC:	begin acc <= res; cf <= resc32; nf <= resn32; zf <= resz32; end
-				`ROL_ACC:	begin acc <= res; cf <= resc32; nf <= resn32; zf <= resz32; end
-				`LSR_ACC:	begin acc <= res; cf <= resc32; nf <= resn32; zf <= resz32; end
-				`ROR_ACC:	begin acc <= res; cf <= resc32; nf <= resn32; zf <= resz32; end
-				`ASL_ZPX,`ASL_ABS,`ASL_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
-				`ROL_ZPX,`ROL_ABS,`ROL_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
-				`LSR_ZPX,`LSR_ABS,`LSR_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
-				`ROR_ZPX,`ROR_ABS,`ROR_ABSX: begin cf <= resc32; nf <= resn32; zf <= resz32; end
+				`ASL_ACC,`ROL_ACC,`LSR_ACC,`ROR_ACC:
+					begin acc <= res; cf <= resc32; nf <= resn32; zf <= resz32; end
+				`ASL_RR,`ROL_RR,`LSR_RR,`ROR_RR,
+				`ASL_ZPX,`ASL_ABS,`ASL_ABSX,
+				`ROL_ZPX,`ROL_ABS,`ROL_ABSX,
+				`LSR_ZPX,`LSR_ABS,`LSR_ABSX,
+				`ROR_ZPX,`ROR_ABS,`ROR_ABSX:
+					begin cf <= resc32; nf <= resn32; zf <= resz32; end
 				`ASL_IMM8: begin nf <= resn32; zf <= resz32; end
 				`LSR_IMM8: begin nf <= resn32; zf <= resz32; end
 				`INC_ZPX,`INC_ABS,`INC_ABSX: begin nf <= resn32; zf <= resz32; end
 				`DEC_ZPX,`DEC_ABS,`DEC_ABSX: begin nf <= resn32; zf <= resz32; end
-				`PLA:	begin acc <= res; zf <= resz32; nf <= resn32; end
-				`PLX:	begin x <= res; zf <= resz32; nf <= resn32; end
-				`PLY:	begin y <= res; zf <= resz32; nf <= resn32; end
-				`LDX_IMM32,`LDX_IMM16,`LDX_IMM8,`LDX_ZPY,`LDX_ABS,`LDX_ABSY:	begin x <= res; nf <= resn32; zf <= resz32; end
-				`LDY_IMM32,`LDY_ZPX,`LDY_ABS,`LDY_ABSX:	begin y <= res; nf <= resn32; zf <= resz32; end
+				`TAX,`TYX,`TSX,`DEX,`INX,
+				`LDX_IMM32,`LDX_IMM16,`LDX_IMM8,`LDX_ZPY,`LDX_ABS,`LDX_ABSY,`PLX:
+					begin x <= res; nf <= resn32; zf <= resz32; end
+				`TAY,`TXY,`DEY,`INY,
+				`LDY_IMM32,`LDY_ZPX,`LDY_ABS,`LDY_ABSX,`PLY:
+					begin y <= res; nf <= resn32; zf <= resz32; end
 				`CPX_IMM32,`CPX_ZPX,`CPX_ABS:	begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
 				`CPY_IMM32,`CPY_ZPX,`CPY_ABS:	begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
 				`CMP_IMM8: begin cf <= ~resc32; nf <= resn32; zf <= resz32; end
-				`LDA_IMM32,`LDA_IMM16,`LDA_IMM8:	begin acc <= res; nf <= resn32; zf <= resz32; end
+				`TSA,`TYA,`TXA,`INA,`DEA,
+				`LDA_IMM32,`LDA_IMM16,`LDA_IMM8,`PLA:	begin acc <= res; nf <= resn32; zf <= resz32; end
+				`POP:	begin nf <= resn32; zf <= resz32; end
 				endcase
 			end
 		end

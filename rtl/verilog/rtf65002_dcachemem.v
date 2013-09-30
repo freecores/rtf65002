@@ -17,23 +17,33 @@
 //                                                                          
 // You should have received a copy of the GNU General Public License        
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
-//                                                   
-// Extra state required for some datapath operations.                       
+//                                                                          
 // ============================================================================
 //
-CALC:
-	begin
-		state <= IFETCH;
-		res <= calc_res;
-		wadr <= radr; 			// These two lines for the shift/inc/dec ops
-		store_what <= `STW_CALC;
-		case(ir[7:0])
-		`ASL_ZPX,`ASL_ABS,`ASL_ABSX,
-		`ROL_ZPX,`ROL_ABS,`ROL_ABSX,
-		`LSR_ZPX,`LSR_ABS,`LSR_ABSX,
-		`ROR_ZPX,`ROR_ABS,`ROR_ABSX,
-		`INC_ZPX,`INC_ABS,`INC_ABSX,
-		`DEC_ZPX,`DEC_ABS,`DEC_ABSX:
-			state <= STORE1;
-		endcase
-	end
+module rtf65002_dcachemem(wclk, wr, sel, wadr, wdat, rclk, radr, rdat);
+input wclk;
+input wr;
+input [3:0] sel;
+input [31:0] wadr;
+input [31:0] wdat;
+input rclk;
+input [31:0] radr;
+output [31:0] rdat;
+
+syncRam2kx32_1rw1r ram0 (
+	.wrst(1'b0),
+	.wclk(wclk),
+	.wce(1'b1),
+	.we(wr),
+	.wsel(sel),
+	.wadr(wadr[10:0]),
+	.i(wdat),
+	.wo(),
+	.rrst(1'b0),
+	.rclk(rclk),
+	.rce(1'b1),
+	.radr(radr[10:0]),
+	.o(rdat)
+);
+
+endmodule
