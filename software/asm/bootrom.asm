@@ -59,15 +59,83 @@ TS_WAITMSG	=2
 TS_PREEMPT	=4
 TS_RUNNING	=8
 TS_READY	=16
-TS_WAITFOCUS	= 32
+TS_SLEEP	=32
 
+MAX_TASKNO	= 255
+
+DIRENT_NAME		=0x00	; file name
+DIRENT_EXT		=0x1C	; file name extension
+DIRENT_ATTR		=0x20	; attributes
+DIRENT_DATETIME	=0x28
+DIRENT_CLUSTER	=0x30	; starting cluster of file
+DIRENT_SIZE		=0x34	; file size (6 bytes)
+
+; One FCB is allocated and filled out for each file that is open.
+;
+nFCBs	= 128
+FCB_DE_NAME		=0x00
+FCB_DE_EXT		=0x1C
+FCB_DE_ATTR		=0x20
+FCB_DE_DATETIME	=0x28
+FCB_DE_CLUSTER	=0x30	; starting cluster of file
+FCB_DE_SIZE		=0x34	; 6 byte file size
+FCB_DIR_SECTOR	=0x40	; LBA directory sector this is from
+FCB_DIR_ENT		=0x44	; offset in sector for dir entry
+FCB_LDRV		=0x48	; logical drive this is on
+FCB_MODE		=0x49	; 0 read, 1=modify
+FCB_NUSERS		=0x4A	; number of users of this file
+FCB_FMOD		=0x4B	; flag: this file was modified
+FCB_RESV		=0x4C	; padding out to 80 bytes
+FCB_SIZE		=0x50
+
+FUB_JOB		=0x00	; User's job umber
+FUB_iFCB	=0x02	; FCB number for this file
+FUB_CrntLFA	=0x04	; six byte current logical file address
+FUB_pBuf	=0x0C	; pointer to buffer if in stream mode
+FUB_sBuf	=0x10	; size of buffer for stream file
+FUB_LFABuf	=0x14	; S-First LFA in Clstr Buffer
+FUB_LFACluster	=0x18	; LFA of cluster
+FUB_Clstr	= 0x20		; The last cluster read
+FUB_fModified	= 0x24	; data in buffer was modified
+FUB_fStream		= 0x25	; non-zero for stream mode
+FUB_PAD		=0x26	
+FUB_SIZE	=0x30
+
+; Boot sector info (62 byte structure) */
+BSI_JMP		= 0x00
+BSI_OEMName	= 0x03
+BSI_bps		= 0x0B
+BSI_SecPerCluster	= 0x0D
+BSI_ResSectors	= 0x0E
+BSI_FATS	= 0x10
+BSI_RootDirEnts	= 0x11
+BSI_Sectors	= 0x13
+BSI_Media	= 0x15
+BSI_SecPerFAT	= 0x16
+BSI_SecPerTrack	= 0x18
+BSI_Heads	= 0x1A
+BSI_HiddenSecs	= 0x1C
+BSI_HugeSecs	= 0x1E
+
+BSI_DriveNum	= 0x24
+BSI_Rsvd1		= 0x25
+BSI_BootSig		= 0x26
+BSI_VolID		= 0x27
+BSI_VolLabel	= 0x2B
+BSI_FileSysType = 0x36
+
+	 
+MEM_CHK		=0
+MEM_FLAG	=1
+MEM_PREV	=2
+MEM_NEXT	=3
 
 ; message queuing strategy
 MQS_UNLIMITED	=0	; unlimited queue size
 MQS_NEWEST		=1	; buffer queue size newest messages
 MQS_OLDEST		=2	; buffer queue size oldest messages
 
-
+LEDS		EQU		0xFFDC0600
 TEXTSCR		EQU		0xFFD00000
 COLORSCR	EQU		0xFFD10000
 TEXTREG		EQU		0xFFDA0000
@@ -78,6 +146,8 @@ KEYBD		EQU		0xFFDC0000
 KEYBDCLR	EQU		0xFFDC0001
 PIC			EQU		0xFFDC0FF0
 PIC_IE		EQU		0xFFDC0FF1
+PIC_ES		EQU		0xFFDC0FF4
+PIC_RSTE	EQU		0xFFDC0FF5
 TASK_SELECT	EQU		0xFFDD0008
 RQ_SEMA		EQU		0xFFDB0000
 TO_SEMA		EQU		0xFFDB0010
@@ -85,6 +155,7 @@ SERIAL_SEMA	EQU		0xFFDB0020
 KEYBD_SEMA	EQU		0xFFDB0030
 IOF_LIST_SEMA	EQU	0xFFDB0040
 MBX_SEMA	EQU		0xFFDB0050
+MEM_SEMA	EQU		0xFFDB0060
 
 SPIMASTER	EQU		0xFFDC0500
 SPI_MASTER_VERSION_REG	EQU	0x00
@@ -174,7 +245,11 @@ BIOS_SCREENS	EQU	0x05C00000	; 0x05C00000 to 0x05DFFFFF
 BYTE_SECTOR_BUF	EQU	SECTOR_BUF<<2
 PROG_LOAD_AREA	EQU		0x4180000<<2
 
+FCBs			EQU		0x5F40000	; room for 128 FCB's
 
+FATOFFS			EQU		0x5F50000	; offset into FAT on card
+FATBUF			EQU		0x5F60000
+DIRBUF			EQU		0x5F70000
 eth_rx_buffer	EQU		0x5F80000
 eth_tx_buffer	EQU		0x5F84000
 
@@ -217,6 +292,7 @@ TCB_iof_next	EQU		0x05FBD600
 TCB_iof_prev	EQU		0x05FBD700
 TCB_SP8Save		EQU		0x05FBD800	; TCB_SP8Save area 
 TCB_SPSave		EQU		0x05FBD900	; TCB_SPSave area
+TCB_ABS8Save	EQU		0x05FBDA00
 
 KeybdHead	EQU		0x05FBEA00
 KeybdTail	EQU		0x05FBEB00
@@ -225,6 +301,9 @@ KeybdBad	EQU		0x05FBED00
 KeybdAck	EQU		0x05FBEE00
 KeybdLocks	EQU		0x05FBEF00
 KeybdBuffer	EQU		0x05FBF000	; buffer is 16 chars
+
+HeapStart	EQU		0x04200000
+HeapEnd		EQU		0x05AFFFFF
 
 ; Bitmap of tasks requesting the I/O focus
 ;
@@ -293,6 +372,7 @@ IRQFlag		EQU		0xFC6
 RdyQueTick	EQU		0xFC7
 eth_unique_id	EQU		0xFC8
 LineColor	EQU		0xFC9
+QIndex		EQU		0xFCA
 
 Uart_rxfifo		EQU		0x05FBC000
 Uart_rxhead		EQU		0xFD0
@@ -317,7 +397,7 @@ startSector	EQU		0xFF0
 
 message "jump table"
 	; jump table of popular BIOS routines
-	org		$FFFFC000
+	org		$FFFF8000
 	dw	DisplayChar
 	dw	KeybdCheckForKeyDirect
 	dw	KeybdGetCharDirect
@@ -330,18 +410,25 @@ message "jump table"
 	dw	ExitTask
 	dw	SetKeyboardEcho
 	dw	Sleep
+	dw	do_load
+	dw	do_save
 
-	org		$FFFFC200		; leave room for 128 vectors
+	org		$FFFF8400		; leave room for 256 vectors
 message "cold start point"
 KeybdRST
 start
 	sei						; disable interrupts
 	cld						; disable decimal mode
+	lda		#1
+	sta		LEDS
 	ldx		#BIOS_STACKS+0x03FF	; setup stack pointer top of memory
 	txs
-	trs		r0,dp			; set direct page register
-	trs		r0,dp8			; and 8 bit mode direct page
-	trs		r0,abs8			; and 8 bit mode absolute address offset
+	trs		r0,abs8			; set 8 bit mode absolute address offset
+
+	jsr		MemInit			; Initialize the heap
+
+	lda		#2
+	sta		LEDS
 
 	; setup interrupt vectors
 	ldx		#$05FB0001		; interrupt vector table from $5FB0000 to $5FB01FF
@@ -362,53 +449,47 @@ start
 	sta		448+15,x
 	lda		#SerialIRQ
 	sta		448+8,x
+	lda		#InvalidOpIRQ
+	sta		495,x
 	lda		#bus_err_rout
 	sta		508,x
 	sta		509,x
 
-	emm
-	cpu		W65C02
-	ldx		#$FF			; set 8 bit stack pointer
-	txs
-	nat
-	cpu		rtf65002
+	lda		#3
+	sta		LEDS
+
+	; stay in native mode in case emulation is not supported.
+	ldx		#$1FF			; set 8 bit stack pointer
+	trs		r2,sp8
 	
 	ldx		#0
 	stz		IrqBase			; support for EhBASIC's interrupt mechanism
 	stz		NmiBase
-	; Initialize the BIOS task
-	lda		#TS_RUNNING|TS_READY
-	sta		TCB_Status
-	stz		TCB_Priority	; set task#0 priority
-	lda		#-1
-	sta		TCB_NxtRdy		; set task#0 next and previous fields
-	sta		TCB_PrvRdy
-	stz		TCB_Timeout
-	stz		RunningTCB		; the BIOS task is the running task
 
+	lda		#-1
 	sta		TimeoutList		; no entries in timeout list
-	sta		IOFocusNdx
-	stz		HeadRdy0		; task zero (the BIOS task) is always present
+	sta		HeadRdy0		; task zero (the BIOS task) is always present
 	sta		HeadRdy1
 	sta		HeadRdy2
 	sta		HeadRdy3
 	sta		HeadRdy4
-	stz		TailRdy0
+	sta		TailRdy0
 	sta		TailRdy1
 	sta		TailRdy2
 	sta		TailRdy3
 	sta		TailRdy4
 
+
 	; Initialize IO Focus List
 	;
-	ldx		#0
+	ldx		#1
 st5:
 	stz		IOFocusTbl,x
 	inx
 	cpx		#8
 	bne		st5
 
-	ldx		#0
+	ldx		#1
 	lda		#-1
 st9:
 	sta		TCB_iof_next,x
@@ -461,32 +542,45 @@ st2:
 	bne		st2
 	lda		#-1
 	sta		TCB_NxtTCB+255
+	lda		#4
+	sta		LEDS
 
+	; Manually setup the BIOS task
+	lda		#-1
+	stz		RunningTCB		; BIOS is task #0
+	sta		TCB_NxtRdy		; manually build the ready list
+	sta		TCB_PrvRdy
+	stz		HeadRdy0		; insert at priority 4
+	stz		TailRdy0
+	stz		TCB_iof_next	; manually build the IO focus list
+	stz		TCB_iof_prev
+	stz		IOFocusNdx		; task #0 has the focus
+	lda		#1
+	sta		IOFocusTbl		; set the task#0 request bit
+	lda		#0
+	sta		TCB_Priority
+	lda		#TS_RUNNING|TS_READY
+	sta		TCB_Status
+	stz		TCB_CursorRow
+	stz		TCB_CursorCol
+	
 	lda		#1
 	sta		MBX_SEMA
 	sta		IOF_LIST_SEMA
 	sta		RQ_SEMA			; set ready queue semaphore
 	sta		TO_SEMA			; set timeout list semaphore
-	jsr		RequestIOFocus		; Get the IO focus for the BIOS (must be after semaphore is initialized)
+
 	lda		#$CE			; CE =blue on blue FB = grey on grey
 	sta		ScreenColor
 	sta		CharColor
 	sta		CursorFlash
 	jsr		ClearScreen
 	jsr		ClearBmpScreen
-	lda		CONFIGREC		; do we have sprites ?
-	bit		#1
-	beq		st8
-	lda		#$3FFF			; turn on sprites
-	sta		SPRITEREGS+120
-	jsr		RandomizeSprram
-st8:
-	jsr		HomeCursor
-	lda		#msgStart
-	jsr		DisplayStringB
-	jsr		KeybdInit
-	lda		#1
-	sta		KeybdEcho
+	lda		#4
+	ldx		#0
+	ldy		#IdleTask
+	jsr		StartTask
+	jsr		PICInit
 	lda		CONFIGREC		; do we have a serial port ?
 	bit		#32
 	beq		st7
@@ -496,21 +590,50 @@ st8:
 	lda		#$03254E6E		; constant for 19,200 baud at 25MHz
 	jsr		SerialInit
 st7:
-	lda		#4
-	ldx		#0
-	ldy		#IdleTask
-	jsr		StartTask
-	jsr		PICInit
-	cli						; enable interrupts
+	lda		#5
+	sta		LEDS
+	lda		CONFIGREC		; do we have sprites ?
+	bit		#1
+	beq		st8
+	lda		#$3FFF			; turn on sprites
+	sta		SPRITEREGS+120
+	jsr		RandomizeSprram
+st8:
+	; Enable interrupts.
+	; Keyboard initialization must take place after interrupts are
+	; enabled.
+	cli						
+	lda		#14
+	sta		LEDS
+	jsr		KeybdInit
+	lda		#1
+	sta		KeybdEcho
+	lda		#6
+	sta		LEDS
+
 	; The following must be after interrupts are enabled.
+	lda		#9
+	sta		LEDS
+	jsr		HomeCursor
+	lda		#msgStart
+	jsr		DisplayStringB
+	jsr		ReportMemFree
+	lda		#10
+	sta		LEDS
+
 	; The AC97 setup uses the millisecond counter and the
 	; keyboard.
 	lda		CONFIGREC		; do we have a sound generator ?
 	bit		#4
 	beq		st6
 	jsr		SetupAC97
-	jsr		Beep
+	lda		#2
+	ldx		#0
+	ldy		#Beep
+	jsr		StartTask
 st6:
+	lda		#11
+	sta		LEDS
 	jmp		Monitor
 st1
 	jsr		KeybdGetCharDirect
@@ -525,7 +648,7 @@ msgStart
 ; Initialize programmable interrupt controller (PIC)
 ;  0 = nmi (parity error)
 ;  1 = keyboard reset
-;  2 = 1000Hz pulse (context switcher)
+;  2 = 1000Hz pulse
 ;  3 = 100Hz pulse (cursor flash)
 ;  4 = ethmac
 ;  8 = uart
@@ -534,8 +657,10 @@ msgStart
 ;----------------------------------------------------------
 message "PICInit"
 PICInit:
-	; enable: raster irq,
-	lda		#$810F			; enable nmi,kbd_rst,and kbd_irq
+	;
+	lda		#$000C			; clock pulses are edge sensitive
+	sta		PIC_ES
+	lda		#$000F			; enable nmi,kbd_rst
 	; A10F enable serial IRQ
 	sta		PIC_IE
 PICret:
@@ -646,7 +771,21 @@ diofl1:
 	
 msgIOFocusList:
 	db	CR,LF,"Task Prv Nxt",CR,LF,0
-	
+
+RunningTCBErr:
+	lda		#$FF
+	sta		LEDS
+	lda		#msgRunningTCB
+	jsr		DisplayStringB
+rtcberr1:
+	jsr		KeybdGetChar
+	cmp		#-1
+	beq		rtcberr1
+	jmp		start
+
+msgRunningTCB:
+	db	CR,LF,"RunningTCB is bad.",CR,LF,0
+
 ;------------------------------------------------------------------------------
 ; IdleTask is a low priority task that is always running. It runs when there
 ; is nothing else to run.
@@ -678,13 +817,14 @@ StartTask:
 	
 	; get a free TCB
 	;
+	php
 	sei
 	lda		FreeTCB				; get free tcb list pointer
 	bmi		stask1
 	tax
 	lda		TCB_NxtTCB,x
 	sta		FreeTCB				; update the FreeTCB list pointer
-	cli
+	plp
 	txa
 	
 	; setup the stack for the task
@@ -697,6 +837,9 @@ StartTask:
 	st		r6,TCB_Priority,r7
 	stz		TCB_Status,r7
 	stz		TCB_Timeout,r7
+	; setup virtual video for the task
+	stz		TCB_CursorRow,r7
+	stz		TCB_CursorCol,r7
 
 	; setup the initial stack image for the task
 	; Cause a return to the ExitTask routine when the task does a 
@@ -730,7 +873,7 @@ stask2:
 	pla
 	rts
 stask1:
-	cli
+	plp
 	lda		#msgNoTCBs
 	jsr		DisplayStringB
 	bra		stask2
@@ -750,6 +893,7 @@ ExitTask:
 	; - mailboxes
 	; - messages
 	lda		RunningTCB
+	bmi		RunningTCBErr
 	jsr		RemoveTaskFromReadyList
 	stz		TCB_Status,r1				; set task status to TS_NONE
 	jsr		ReleaseIOFocus
@@ -763,23 +907,19 @@ ExitTask:
 ; This subroutine is called from the timer ISR so it must be relatively
 ; fast.
 ; Parameters:
-; r1 = task number
-;
+;	r1 = task number
+; Returns:
+;	none
 ;------------------------------------------------------------------------------
 message "AddTaskToReadyList"
 AddTaskToReadyList:
+	php
 	pha
 	phx
 	phy
-	php
 	sei
-	ldy		TCB_Priority,r1	; make sure the priority value isn't screwy.
-	cpy		#5
-	bpl		arl3
-arl2:
+	ldy		TCB_Priority,r1
 	ldx		TCB_Status,r1	; set the task status to ready
-	bit		r2,#TS_READY	; is the task already on the ready list ?
-	bne		arl3
 	or		r2,r2,#TS_READY
 	stx		TCB_Status,r1
 	ldx 	TailRdy0,y		; insert the task at the list tail
@@ -796,10 +936,10 @@ arl4:
 	ldx		#-1				; There is no previous task at the head.
 	stx		TCB_PrvRdy,r1	
 arl3:	
-	plp
 	ply
 	plx
 	pla
+	plp
 	rts
 	; Here the tail of the ready list needed to be updated. Flag no prior task.
 arl1:
@@ -815,33 +955,22 @@ arl1:
 ;------------------------------------------------------------------------------
 message "RemoveTaskFromReadyList"
 RemoveTaskFromReadyList:
-	cmp		#0				
-	bmi		rfr9			; bad task number, must be >= 0
-	cmp		#255			; and must be <= 255
-	bpl		rfr9
+	php						; save off interrupt mask state
 	pha
 	phx
 	phy
 	push	r4
 	push	r5
 
-	php						; save off interrupt mask state
 	sei
-	ld		r4,TCB_Status,r1	; check if the task is even on the ready list
-	bit		r4,#TS_READY
-	beq		rfr2				; not on ready list, then we're done
 	ld		r4,TCB_NxtRdy,r1	; Get previous and next fields.
 	ld		r5,TCB_PrvRdy,r1	; if there is no previous task, then this is
 	bmi		rfr1			; the head of the list. Update.
 	st		r4,TCB_NxtRdy,r5
 	cmp		r4,#0			; is there a next task to update ?
-	bmi		rfr8
+	bmi		rfr4
 	st		r5,TCB_PrvRdy,r4
-rfr4:
-	ld		r5,#-1
-	st		r5,TCB_NxtRdy,r1
-	st		r5,TCB_PrvRdy,r1
-	bra		rfr8
+	bra		rfr4
 
 	; Update the head of the list
 rfr1:
@@ -851,19 +980,22 @@ rfr1:
 	bmi		rfr3
 	ld		r5,#-1			; flag no previous task for head of list
 	st		r5,TCB_PrvRdy,r4
-	st		r5,TCB_NxtRdy,r1
-	st		r5,TCB_PrvRdy,r1
-rfr8:
+rfr4:
+	stz		TCB_NxtRdy,r1	; Task is removed from ready list so the
+	stz		TCB_PrvRdy,r1	; contents of these fields shouldn't matter.
+							; They are set to zero (the BIOS task) in case
+							; there is a list problem.
+
 	ldx		TCB_Status,r1	; set the task status to no longer ready.
 	and		r2,r2,#~TS_READY
 	stx		TCB_Status,r1
 rfr2:
-	plp
 	pop		r5
 	pop		r4
 	ply
 	plx
 	pla
+	plp
 rfr9:
 	rts
 rfr3:
@@ -882,9 +1014,9 @@ rfr3:
 message "AddToTimeoutList"
 AddToTimeoutList:
 	cmp		#0						; quickly validate the task number
-	bmi		attl4					; must be between 0 and 255
-	cmp		#255
-	bpl		attl4
+	bmi		RunningTCBErr			; must be between 0 and 255
+	cmp		#MAX_TASKNO
+	bpl		RunningTCBErr
 
 	phx
 	push	r4
@@ -963,9 +1095,9 @@ attl4:
 message "RemoveFromTimeoutList"
 RemoveFromTimeoutList:
 	cmp		#0						; quickly validate the task number
-	bmi		rft4					; must be between 0 and 255
-	cmp		#255
-	bpl		rft4
+	bmi		RunningTCBErr			; must be between 0 and 255
+	cmp		#MAX_TASKNO
+	bpl		RunningTCBErr
 
 	pha
 	phx
@@ -1016,7 +1148,7 @@ rft4:
 
 ;------------------------------------------------------------------------------
 ; Parameters:
-; r1 = time duration in centi-seconds
+; r1 = time duration in centi-seconds (1/100 second).
 ;------------------------------------------------------------------------------
 Sleep:
 	tax
@@ -1053,6 +1185,7 @@ AllocMbx:
 	dec		nMailbox		; decrement number of available mailboxes
 	tax
 	ldy		RunningTCB			; set the mailbox owner
+	bmi		RunningTCBErr
 	lda		TCB_hJCB,y
 	sta		MBX_OWNER,x
 	lda		#-1				; initialize the head and tail of the queues
@@ -1067,6 +1200,7 @@ AllocMbx:
 	sta		MBX_MQ_SIZE,x	; and
 	lda		#MQS_NEWEST		; queueing strategy
 	sta		MBX_MQ_STRATEGY,x
+ambx3:
 	plp
 	pop		r4
 	ply
@@ -1320,6 +1454,7 @@ WaitMsg:
 	; the ready list, and optionally add it to the timeout list.
 	; Queue the task at the mailbox.
 	lda		RunningTCB				; remove the task from the ready list
+	bmi		wmsg8
 	jsr		RemoveTaskFromReadyList
 	ld		r7,TCB_Status,r1			; set task status to waiting
 	or		r7,r7,#TS_WAITMSG
@@ -1500,6 +1635,7 @@ cmsg5:
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 SetIOFocusBit:
+	and		r2,r2,#$FF
 	and		r1,r2,#$1F		; get bit index 0 to 31
 	ldy		#1
 	asl		r3,r3,r1		; shift bit to proper place
@@ -1521,14 +1657,9 @@ RequestIOFocus:
 	phy
 	php
 	sei
-	ldx		RunningTCB		
+	ldx		RunningTCB	
 	ldy		IOFocusNdx		; Is the focus list empty ?
 	bmi		riof2
-	cpx		IOFocusNdx		; does the task already have the focus ?
-	beq		riof4
-	lda		TCB_Status,x	; update the task status to waiting for focus
-	or		#TS_WAITFOCUS
-	sta		TCB_Status,x
 riof4:
 	lda		TCB_iof_next,x	; is the task already in the IO focus list ?
 	bpl		riof3
@@ -1540,15 +1671,6 @@ riof4:
 	stx		TCB_iof_next,y
 riof3:
 	jsr		SetIOFocusBit
-
-	; If the task doesn't have the I/O focus, then remove it
-	; from the ready list.
-	ldx		RunningTCB
-	cpx		IOFocusNdx
-	beq		riof5
-	txa
-	jsr		RemoveTaskFromReadyList
-riof5:
 	plp
 	ply
 	plx
@@ -1561,9 +1683,6 @@ riof2:
 	stx		IOFocusNdx
 	stx		TCB_iof_next,x
 	stx		TCB_iof_prev,x
-	lda		TCB_Status,x
-	and		#~TS_WAITFOCUS
-	sta		TCB_Status,x
 	bra		riof3
 
 ;------------------------------------------------------------------------------
@@ -1579,9 +1698,6 @@ ReleaseIOFocus:
 	sei
 	ldx		RunningTCB	
 	phx	
-	lda		TCB_Status,x	; set the task status as no longer waiting for
-	and		r1,r1,#~TS_WAITFOCUS	; focus
-	sta		TCB_Status,x
 	ldy		#1
 	and		r1,r2,#$1F		; get bit index 0 to 31
 	asl		r3,r3,r1		; shift bit to proper place
@@ -1610,6 +1726,7 @@ rliof2:
 	lda		#-1				; Update the next and prev fields to indicate
 	sta		TCB_iof_next,x	; the task is no longer on the list.
 	sta		TCB_iof_prev,x
+rliof3:
 	plp
 	ply
 	plx
@@ -1617,11 +1734,14 @@ rliof2:
 	rts
 
 ;------------------------------------------------------------------------------
+; Get the location of the screen and screen attribute memory. The location
+; depends on whether or not the task has the output focus.
 ;------------------------------------------------------------------------------
 GetScreenLocation:
 	lda		RunningTCB
 	cmp		IOFocusNdx
 	beq		gsl1
+	and		r1,r1,#$FF
 	asl		r1,r1,#13			; 8192 words per screen
 	add		r1,r1,#BIOS_SCREENS
 	rts
@@ -1633,6 +1753,7 @@ GetColorCodeLocation:
 	lda		RunningTCB
 	cmp		IOFocusNdx
 	beq		gccl1
+	and		r1,r1,#$FF
 	asl		r1,r1,#13			; 8192 words per screen
 	add		r1,r1,#BIOS_SCREENS+4096
 	rts
@@ -1654,27 +1775,28 @@ CopyVirtualScreenToScreen
 	asl		r2,r2,#13			; 8192 words per screen
 	add		r2,r2,#BIOS_SCREENS	; add in screens array base address
 	ldy		#TEXTSCR
-;	mvn
-cvss1:
-	ld		r4,(x)
-	st		r4,(y)
-	inx
-	iny
-	dea
-	bne		cvss1
+	mvn
+;cvss1:
+;	ld		r4,(x)
+;	st		r4,(y)
+;	inx
+;	iny
+;	dea
+;	bne		cvss1
 	; now copy the color codes
 	lda		#4095
 	ldx		IOFocusNdx
 	asl		r2,r2,#13
 	add		r2,r2,#BIOS_SCREENS+4096	; virtual char color array
 	ldy		#TEXTSCR+$10000
-cvss2:
-	ld		r4,(x)
-	st		r4,(y)
-	inx
-	iny
-	dea
-	bne		cvss2
+	mvn
+;cvss2:
+;	ld		r4,(x)
+;	st		r4,(y)
+;	inx
+;	iny
+;	dea
+;	bne		cvss2
 cvss3:
 	; reset the cursor position in the text controller
 	ldy		IOFocusNdx
@@ -1700,25 +1822,27 @@ CopyScreenToVirtualScreen
 	bmi		csvs3
 	asl		r3,r3,#13
 	add		r3,r3,#BIOS_SCREENS
-csvs1:
-	ld		r4,(x)
-	st		r4,(y)
-	inx
-	iny
-	dea
-	bne		csvs1
+	mvn
+;csvs1:
+;	ld		r4,(x)
+;	st		r4,(y)
+;	inx
+;	iny
+;	dea
+;	bne		csvs1
 	lda		#4095
 	ldx		#TEXTSCR+$10000
 	ldy		IOFocusNdx
 	asl		r3,r3,#13
 	add		r3,r3,#BIOS_SCREENS+4096
-csvs2:
-	ld		r4,(x)
-	st		r4,(y)
-	inx
-	iny
-	dea
-	bne		csvs2
+	mvn
+;csvs2:
+;	ld		r4,(x)
+;	st		r4,(y)
+;	inx
+;	iny
+;	dea
+;	bne		csvs2
 csvs3:
 	pop		r4
 	ply
@@ -1876,9 +2000,41 @@ stasc1:
 HomeCursor:
 	phx
 	ldx		RunningTCB
+	and		r2,r2,#$FF
 	stz		TCB_CursorRow,x
 	stz		TCB_CursorCol,x
+	cpx		IOFocusNdx
+	bne		hc1
+	stz		TEXTREG+TEXT_CURPOS
+hc1:
 	plx
+	rts
+
+;------------------------------------------------------------------------------
+; Update the cursor position in the text controller based on the
+;  CursorRow,CursorCol.
+;------------------------------------------------------------------------------
+;
+UpdateCursorPos:
+	pha
+	phx
+	push	r4
+	ld		r4,RunningTCB
+	and		r4,r4,#$FF
+	cmp		r4,IOFocusNdx			; update cursor position in text controller
+	bne		ucp1					; only for the task with the output focus
+	lda		TCB_CursorRow,r4
+	and		#$3F					; limit of 63 rows
+	ldx		TEXTREG+TEXT_COLS
+	mul		r2,r2,r1
+	lda		TCB_CursorCol,r4
+	and		#$7F					; limit of 127 cols
+	add		r2,r2,r1
+	stx		TEXTREG+TEXT_CURPOS
+ucp1:
+	pop		r4
+	plx
+	pla
 	rts
 
 ;------------------------------------------------------------------------------
@@ -1892,17 +2048,25 @@ CalcScreenLoc:
 	phx
 	push	r4
 	ld		r4,RunningTCB
+	and		r4,r4,#$FF
 	lda		TCB_CursorRow,r4
+	and		#$3F					; limit to 63 rows
 	ldx		TEXTREG+TEXT_COLS
 	mul		r2,r2,r1
-	add		r2,r2,TCB_CursorCol,r4
+	ld		r1,TCB_CursorCol,r4
+	and		#$7F					; limit to 127 cols
+	add		r2,r2,r1
 	cmp		r4,IOFocusNdx			; update cursor position in text controller
 	bne		csl1					; only for the task with the output focus
 	stx		TEXTREG+TEXT_CURPOS
 csl1:
 	jsr		GetScreenLocation
 	add		r1,r2,r1
+	pop		r4
+	plx
+	rts
 csl2:
+	lda		#TEXTSCR
 	pop		r4
 	plx
 	rts
@@ -1918,11 +2082,13 @@ message "DisplayChar"
 DisplayChar:
 	push	r4
 	ld		r4,RunningTCB
+	and		r4,r4,#$FF
 	and		#$FF				; mask off any higher order bits (called from eight bit mode).
 	cmp		#'\r'				; carriage return ?
 	bne		dccr
 	stz		TCB_CursorCol,r4	; just set cursor column to zero on a CR
-	jsr		CalcScreenLoc
+	jsr		UpdateCursorPos
+dcx14:
 	pop		r4
 	rts
 dccr:
@@ -1935,7 +2101,7 @@ dccr:
 	ina
 	sta		TCB_CursorCol,r4
 dcx7:
-	jsr		CalcScreenLoc
+	jsr		UpdateCursorPos
 	pla
 	pop		r4
 	rts
@@ -2045,6 +2211,7 @@ IncCursorPos:
 	phx
 	push	r4
 	ld		r4,RunningTCB
+	and		r4,r4,#$FF
 	lda		TCB_CursorCol,r4
 	ina
 	sta		TCB_CursorCol,r4
@@ -2058,6 +2225,7 @@ IncCursorRow:
 	phx
 	push	r4
 	ld		r4,RunningTCB
+	and		r4,r4,#$FF
 icr1:
 	lda		TCB_CursorRow,r4
 	ina
@@ -2070,7 +2238,8 @@ icr1:
 	stx		TCB_CursorRow,r4
 	jsr		ScrollUp
 icc1:
-	jsr		CalcScreenLoc
+	jsr		UpdateCursorPos
+icc2:
 	pop		r4
 	plx
 	pla
@@ -2097,6 +2266,39 @@ dsretB:
 	pla
 	rts
 
+DisplayStringQ:
+	pha
+	phx
+	tax						; r2 = pointer to string
+	lda		#TEXTSCR
+	sta		QIndex
+dspj1Q:
+	lb		r1,0,x			; move string char into acc
+	inx						; increment pointer
+	cmp		#0				; is it end of string ?
+	beq		dsretQ
+	jsr		DisplayCharQ	; display character
+	bra		dspj1Q
+dsretQ:
+	plx
+	pla
+	rts
+
+DisplayCharQ:
+	pha
+	phx
+	jsr		AsciiToScreen
+	ldx		#0
+	sta		(QIndex,x)
+	lda		QIndex
+	ina
+	sta		QIndex
+;	inc		QIndex
+	plx
+	pla
+	rts
+
+	
 ;------------------------------------------------------------------------------
 ; Display a string on the screen.
 ; The characters are packed 1 per word
@@ -2141,6 +2343,8 @@ message "KeybdInit"
 KeybdInit:
 	lda		#1			; setup semaphore
 	sta		KEYBD_SEMA
+	lda		#32
+	sta		LEDS
 	ldx		#0
 kbdi1:
 	stz		KeybdHead,x		; setup keyboard buffer
@@ -2149,23 +2353,40 @@ kbdi1:
 	sta		KeybdEcho,x
 	stz		KeybdBad,x
 	inx
-	cpx		#256
+	cpx		#MAX_TASKNO+1
 	bne		kbdi1
-	
+
+	lda		PIC_IE
+	or		r1,r1,#$8000		; enable kbd_irq
+	sta		PIC_IE
+
+	lda		#33
+	sta		LEDS
 	lda		#$ff		; issue keyboard reset
 	jsr		SendByteToKeybd
+	lda		#38
+	sta		LEDS
 	lda		#1000000		; delay a bit
 kbdi5:
 	dea
+	sta		LEDS
 	bne		kbdi5
+	lda		#34
+	sta		LEDS
 	lda		#0xf0		; send scan code select
 	jsr		SendByteToKeybd
+	lda		#35
+	sta		LEDS
 	ldx		#0xFA
 	jsr		WaitForKeybdAck
 	cmp		#$FA
 	bne		kbdi2
+	lda		#36
+	sta		LEDS
 	lda		#2			; select scan code set#2
 	jsr		SendByteToKeybd
+	lda		#39
+	sta		LEDS
 kbdi2:
 	rts
 
@@ -2176,36 +2397,50 @@ SendByteToKeybd:
 	phx
 	ldx		RunningTCB
 	sta		KEYBD
+	lda		#40
+	sta		LEDS
 	tsr		TICK,r3
 kbdi4:						; wait for transmit complete
 	tsr		TICK,r4
 	sub		r4,r4,r3
 	cmp		r4,#1000000
 	bcs		kbdbad
+	lda		#41
+	sta		LEDS
 	lda		KEYBD+3
 	bit		#64
 	beq		kbdi4
 	bra		sbtk1
 kbdbad:
+	lda		#42
+	sta		LEDS
 	lda		KeybdBad,x
 	bne		sbtk1
 	lda		#1
 	sta		KeybdBad,x
+	lda		#43
+	sta		LEDS
 	lda		#msgBadKeybd
 	jsr		DisplayStringCRLFB
 sbtk1:
+	lda		#44
+	sta		LEDS
 	plx
 	rts
 	
 ; Wait for keyboard to respond with an ACK (FA)
 ;
 WaitForKeybdAck:
+	lda		#64
+	sta		LEDS
 	tsr		TICK,r3
 wkbdack1:
 	tsr		TICK,r4
 	sub		r4,r4,r3
 	cmp		r4,#1000000
 	bcs		wkbdbad
+	lda		#65
+	sta		LEDS
 	lda		KEYBD
 	bit		#$8000
 	beq		wkbdack1
@@ -2319,6 +2554,7 @@ GetIOFocusBit:
 	
 ;------------------------------------------------------------------------------
 ; SwitchIOFocus
+;
 ; Switches the IO focus to the next task requesting the I/O focus. This
 ; routine may be called when a task releases the I/O focus as well as when
 ; the user presses ALT-TAB on the keyboard.
@@ -2326,7 +2562,6 @@ GetIOFocusBit:
 ;
 SwitchIOFocus:
 	pha
-	phx
 	phy
 
 	; First check if it's even possible to switch the focus to another
@@ -2339,38 +2574,16 @@ SwitchIOFocus:
 	cmp		r1,r3			; Will the list head change ?
 	beq		siof3			; If not then no switch will occur
 	
-	; Check if outgoing task still wants the focus. If the task doesn't
-	; want the focus there's no reason to set the status as waiting or
-	; remove it from the ready list.
-	tya						
-	jsr		GetIOFocusBit	; don't set the 'waiting for focus' status
-	cmp		#0				; if not.
-	beq		siof1
-	lda		TCB_Status,y	; Set outgoing task status to 'waiting for focus'
-	or		r1,r1,#TS_WAITFOCUS
-	sta		TCB_Status,y
-	tya						; The outgoing task will now be waiting for the focus
-	jsr		RemoveTaskFromReadyList
-siof1:
 	; Copy the current task's screen to it's virtual screen buffer.
 	jsr		CopyScreenToVirtualScreen
 
-	lda		TCB_iof_next,y	; Get the next task on the list.
 	sta		IOFocusNdx		; Make task the new head of list.
-	tay
-	lda		TCB_Status,y	
-	beq		siof2			; Check: task is exiting (status==0) so don't add it back
-	and		#~TS_WAITFOCUS	; to the ready list.
-	sta		TCB_Status,y
-	tya
-	jsr		AddTaskToReadyList
-siof2:
+
 	; Copy the virtual screen of the task recieving the I/O focus to the
 	; text screen.
 	jsr		CopyVirtualScreenToScreen
 siof3:
 	ply
-	plx
 	pla
 	rts
 	
@@ -2387,6 +2600,9 @@ KeybdGetChar:
 	php
 	sei
 	ld		r4,RunningTCB
+	bmi		RunningTCBErr
+	cmp		#MAX_TASKNO
+	bpl		RunningTCBErr
 	ldx		KeybdTail,r4	; if keybdTail==keybdHead then there are no 
 	lda		KeybdHead,r4	; characters in the keyboard buffer
 	cmp		r1,r2
@@ -2936,15 +3152,26 @@ Prompt3:
 ; Process the screen line that the CR was keyed on
 ;
 Prompt1:
+	lda		#80
+	sta		LEDS
 	ldx		RunningTCB
+	bmi		RunningTCBErr
+	cpx		#MAX_TASKNO
+	bpl		RunningTCBErr
+	lda		#81
+	sta		LEDS
 	stz		TCB_CursorCol,x	; go back to the start of the line
 	jsr		CalcScreenLoc	; r1 = screen memory location
 	tay
+	lda		#82
+	sta		LEDS
 	lda		(y)
 	iny
 	jsr		ScreenToAscii
 	cmp		#'$'
 	bne		Prompt2			; skip over '$' prompt character
+	lda		#83
+	sta		LEDS
 	lda		(y)
 	iny
 	jsr		ScreenToAscii
@@ -2961,6 +3188,8 @@ Prompt2:
 	jsr		ScreenToAscii
 	cmp		#'R'
 	beq		DumpReg
+	cmp		#'I'
+	beq		DoDir
 	dey
 	bra		DumpMem
 Prompt8:
@@ -2974,6 +3203,8 @@ Prompt8:
 	jsr		DumpIOFocusList
 	jmp		Monitor
 Prompt8a:
+	cmp		#'M'
+	beq		DoFmt
 	dey
 	bra		FillMem
 Prompt7:
@@ -3026,7 +3257,11 @@ Prompt12:
 Prompt13:
 	cmp		#'P'
 	bne		Prompt14
-	jmp		Piano
+	lda		#2
+	ldx		#0
+	ldy		#Piano
+	jsr		StartTask
+	jmp		Monitor
 Prompt14:
 	cmp		#'T'
 	bne		Prompt15
@@ -3075,6 +3310,13 @@ Prompt17:
 message "Prompt16"
 RandomLinesCall:
 ;	jsr		RandomLines
+	jmp		Monitor
+
+DoDir:
+	jsr		do_dir
+	jmp		Monitor
+DoFmt:
+	jsr		do_fmt
 	jmp		Monitor
 
 TestCLS:
@@ -3522,16 +3764,12 @@ Beep:
 	sta		PSGADSR0
 	lda		#0x1104			; gate, output enable, triangle waveform
 	sta		PSGCTRL0
-	lda		#2500000		; delay about 1s
-beep1:
-	dea
-	bne		beep1
+	lda		#100			; delay about 1s
+	jsr		Sleep
 	lda		#0x0104			; gate off, output enable, triangle waveform
 	sta		PSGCTRL0
-	lda		#2500000		; delay about 1s
-beep2:
-	dea
-	bne		beep2
+	lda		#100			; delay about 1s
+	jsr		Sleep
 	lda		#0x0000			; gate off, output enable off, no waveform
 	sta		PSGCTRL0
 	pla
@@ -3541,12 +3779,13 @@ beep2:
 ;--------------------------------------------------------------------------
 ; 
 Piano:
+	jsr		RequestIOFocus
 	lda		#15				; master volume to max
 	sta		PSG+128
 playnt:
 	jsr		KeybdGetChar
 	cmp		#CTRLC
-	beq		Monitor
+	beq		PianoX
 	cmp		#'a'
 	beq		playnt1a
 	cmp		#'b'
@@ -3562,6 +3801,9 @@ playnt:
 	cmp		#'g'
 	beq		playnt1g
 	bra		playnt
+PianoX:
+	jsr		ReleaseIOFocus
+	rts
 
 playnt1a:
 	lda		#7217
@@ -3639,8 +3881,8 @@ spi_init1
 	and		#3
 	cmp		#SPI_INIT_NO_ERROR
 	bne		spi_error
-	lda		#spi_init_ok_msg
-	jsr		DisplayStringB
+;	lda		#spi_init_ok_msg
+;	jsr		DisplayStringB
 	lda		#0
 	rts
 spi_error
@@ -3799,6 +4041,31 @@ spi_write_ret:
 	plx
 	rts
 
+; SPI read multiple sector
+;
+; r1= sector number to read
+; r2= address to write data
+; r3= number of sectors to read
+;
+; Returns:
+; r1 = 0 if successful
+;
+spi_read_multiple:
+	push	r4
+	ld		r4,#0
+spi_rm1:
+	pha
+	jsr		spi_read_sector
+	add		r4,r4,r1
+	add		r2,r2,#512
+	pla
+	ina
+	dey
+	bne		spi_rm1
+	ld		r1,r4
+	pop		r4
+	rts
+
 ; SPI write multiple sector
 ;
 ; r1= sector number to write
@@ -3810,6 +4077,7 @@ spi_write_ret:
 ;
 spi_write_multiple:
 	push	r4
+	ld		r4,#0
 spi_wm1:
 	pha
 	jsr		spi_write_sector
@@ -3909,9 +4177,9 @@ msgNotFoundEB:
 ; r2 = where to place root directory in memory
 ;
 loadBootFile:
-	lb		r1,BYTE_SECTOR_BUF+$17			; sectors per FAT
+	lb		r1,BYTE_SECTOR_BUF+BSI_SecPerFAT+1			; sectors per FAT
 	asl		r1,r1,#8
-	orb		r1,r1,BYTE_SECTOR_BUF+$16
+	orb		r1,r1,BYTE_SECTOR_BUF+BSI_SecPerFAT
 	bne		loadBootFile7
 	lb		r1,BYTE_SECTOR_BUF+$27			; sectors per FAT, FAT32
 	asl		r1,r1,#8
@@ -3983,6 +4251,215 @@ spi_read_error_msg:
 spi_write_error_msg:
 	db	"SD card write error",0
 
+do_fmt:
+	jsr		spi_init
+	cmp		#0
+	bne		fmt_abrt
+	ldx		#DIRBUF
+	ldy		#65536
+	; clear out the directory buffer
+dfmt1:
+	stz		(x)
+	inx
+	dey
+	bne		dfmt1
+	jsr		store_dir
+fmt_abrt:
+	rts
+
+do_dir:
+	jsr		CRLF
+	jsr		spi_init
+	cmp		#0
+	bne		dirabrt
+	jsr		load_dir
+	ld		r4,#0			; r4 = entry counter
+ddir3:
+	asl		r3,r4,#6		; y = start of entry, 64 bytes per entry
+	ldx		#32				; 32 chars in filename
+ddir4:
+	lb		r1,DIRBUF<<2,y
+	beq		ddir2			; move to next dir entry if null is found
+	cmp		#$20			; don't display control chars
+	bmi		ddir1
+	jsr		DisplayChar
+	bra		ddir5
+ddir1:
+	lda		#' '
+	jsr		DisplayChar
+ddir5:
+	iny
+	dex
+	bne		ddir4
+	lda		#' '
+	jsr		DisplayChar
+	asl		r3,r4,#4		; y = start of entry, 16 words per entry
+	lda		DIRBUF+$D,y
+	ldx		#5
+	jsr		PRTNUM
+	jsr		CRLF
+ddir2:
+	jsr		KeybdGetChar
+	cmp		#CTRLC
+	beq		ddir6
+	inc		r4
+	cmp		r4,#512		; max 512 dir entries
+	bne		ddir3
+ddir6:
+
+dirabrt:
+	rts
+
+load_dir:
+	pha
+	phx
+	phy
+	lda		#4000
+	ldx		#DIRBUF<<2
+	ldy		#64
+	jsr		spi_read_multiple
+	ply
+	plx
+	pla
+	rts
+store_dir:
+	pha
+	phx
+	phy
+	lda		#4000
+	ldx		#DIRBUF<<2
+	ldy		#64
+	jsr		spi_write_multiple
+	ply
+	plx
+	pla
+	rts
+
+; r1 = pointer to file name
+; r2 = pointer to buffer to save
+; r3 = length of buffer
+;
+do_save:
+	pha
+	jsr		spi_init
+	cmp		#0
+	bne		dsavErr
+	pla
+	jsr		load_dir
+	ld		r4,#0
+dsav4:
+	asl		r5,r4,#6
+	ld		r7,#0
+	ld		r10,r1
+dsav2:
+	lb		r6,DIRBUF<<2,r5
+	lb		r8,0,r10
+	cmp		r6,r8
+	bne		dsav1
+	inc		r5
+	inc		r7
+	inc		r10
+	cmp		r7,#32
+	bne		dsav2
+	; here the filename matched
+dsav8:
+	asl		r7,r4,#7	; compute file address	64k * entry #
+	add		r7,r7,#5000	; start at sector 5,000
+	ld		r1,r7		; r1 = sector number
+	lsr		r3,r3,#9	; r3/512
+	iny					; +1
+	jsr		spi_write_multiple
+dsav3:
+	rts
+	; Here the filename didn't match
+dsav1:
+	inc		r4
+	cmp		r4,#512
+	bne		dsav4
+	; Here none of the filenames in the directory matched
+	; Find an empty entry.
+	ld		r4,#0
+dsav6:
+	asl		r5,r4,#6
+	lb		r6,DIRBUF<<2,r5
+	beq		dsav5
+	inc		r4
+	cmp		r4,#512
+	bne		dsav6
+	; Here there were no empty entries
+	lda		#msgDiskFull
+	jsr		DisplayStringB
+	rts
+dsav5:
+	ld		r7,#32
+	ld		r10,r1
+dsav7:
+	lb		r6,0,r10	; copy the filename into the directory entry
+	sb		r6,DIRBUF<<2,r5
+	inc		r5
+	inc		r10
+	dec		r7
+	bne		dsav7
+						; copy the file size into the directory entry
+	asl		r5,r4,#4	; 16 words per dir entry
+	sty		DIRBUF+$D,r5
+	jsr		store_dir
+	bra		dsav8
+dsavErr:
+	pla
+	rts
+
+msgDiskFull
+	db	CR,LF,"The disk is full, unable to save file.",CR,LF,0
+
+do_load:
+	pha
+	jsr		spi_init
+	cmp		#0
+	bne		dsavErr
+	pla
+	jsr		load_dir
+	ld		r4,#0
+dlod4:
+	asl		r5,r4,#6
+	ld		r7,#0
+	ld		r10,r1
+dlod2:
+	lb		r6,DIRBUF<<2,r5
+	lb		r8,0,r10
+	cmp		r6,r8
+	bne		dlod1
+	inc		r5
+	inc		r7
+	inc		r10
+	cmp		r7,#32
+	bne		dlod2
+	; here the filename matched
+dlod8:
+	asl		r5,r4,#4				; 16 words
+	ld		r3,DIRBUF+$d,r5			; get file size into y register
+	asl		r7,r4,#7	; compute file address	64k * entry #
+	add		r7,r7,#5000	; start at sector 5,000
+	ld		r1,r7		; r1 = sector number
+	lsr		r3,r3,#9	; r3/512
+	iny					; +1
+	jsr		spi_read_multiple
+dlod3:
+	rts
+	; Here the filename didn't match
+dlod1:
+	inc		r4
+	cmp		r4,#512
+	bne		dlod4
+	; Here none of the filenames in the directory matched
+	; 
+	lda		#msgFileNotFound
+	jsr		DisplayStringB
+	rts
+
+msgFileNotFound:
+	db	CR,LF,"File not found.",CR,LF
+	
 ;==============================================================================
 ; Ethernet
 ;==============================================================================
@@ -4660,6 +5137,145 @@ dln300:
 
 ;include "float.asm"
 
+
+;==============================================================================
+; Memory Management routines follow.
+;==============================================================================
+MemInit:
+	lda		#1					; initialize memory semaphore
+	sta		MEM_SEMA
+	lda		#$4D454D20
+	sta		HeapStart+MEM_CHK
+	sta		HeapStart+MEM_FLAG
+	sta		HeapEnd-2
+	sta		HeapEnd-3
+	lda		#0
+	sta		HeapStart+MEM_PREV	; prev of first MEMHDR
+	sta		HeapEnd			; next of last MEMHDR
+	lda		#HeapEnd
+	ina
+	sub		#$4
+	sta		HeapStart+MEM_NEXT	; next of first MEMHDR
+	lda		#HeapStart
+	sta		HeapEnd-1		; prev of last MEMHDR
+	rts
+
+ReportMemFree:
+	jsr		CRLF
+	lda		#HeapEnd
+	ina
+	sub		#HeapStart
+	ldx		#5
+	jsr		PRTNUM
+	lda		#msgMemFree
+	jsr		DisplayStringB
+	rts
+
+msgMemFree:
+	db	" words free",CR,LF,0
+	
+;------------------------------------------------------------------------------
+; Allocate memory from the heap.
+;------------------------------------------------------------------------------
+MemAlloc:
+	phx
+	phy
+	push	r4
+memaSpin:
+	ldx		MEM_SEMA+1
+	beq		memaSpin
+	ldx		#HeapStart
+mema4:
+	ldy		MEM_FLAG,x		; Check the flag word to see if this block is available
+	cpy		#$4D454D20
+	bne		mema1			; block not available, go to next block
+	ld		r4,MEM_NEXT,x	; compute the size of this block
+	sub		r4,r4,r2
+	sub		r4,r4,#4		; minus size of block header
+	cmp		r1,r4			; is the block large enough ?
+	bmi		mema2			; if yes, go allocate
+mema1:
+	ldx		MEM_NEXT,x		; go to the next block
+	beq		mema3			; if no more blocks, out of memory error
+	bra		mema4
+mema2:
+	ldy		#$6D656D20
+	sty		MEM_FLAG,x
+	sub		r4,r4,r1
+	cmp		r4,#4			; is the block large enough to split
+	bpl		memaSplit
+	stz		MEM_SEMA+1
+	txa
+	pop		r4
+	ply
+	plx
+	rts
+mema3:						; insufficient memory
+	stz		MEM_SEMA+1
+	pop		r4
+	ply
+	plx
+	lda		#0
+	rts
+memaSplit:
+	add		r4,r1,r2
+	add		r4,r4,#4
+	ldy		#$4D454D20
+	sty		(r4)
+	sty		MEM_FLAG,r4
+	stx		MEM_PREV,r4
+	ldy		MEM_NEXT,x
+	sty		MEM_NEXT,r4
+	st		r4,MEM_PREV,y
+	ld		r1,r4
+	stz		MEM_SEMA+1
+	pop		r4
+	ply
+	plx
+	rts
+
+;------------------------------------------------------------------------------
+; Free previously allocated memory. Recombine with next and previous blocks
+; if they are free as well.
+;------------------------------------------------------------------------------
+MemFree:
+	cmp		#0			; null pointer ?
+	beq		memf2
+	phx
+	phy
+memfSpin:
+	ldx		MEM_SEMA+1
+	beq		memfSpin
+	ldx		MEM_FLAG,r1
+	cpx		#$6D656D20	; is the block allocated ?
+	bne		memf1
+	ldx		#$4D454D20
+	stx		MEM_FLAG,r1	; mark block as free
+	ldx		MEM_PREV,r1	; is the previous block free ?
+	beq		memf3		; no previous block
+	ldy		MEM_FLAG,x
+	cpy		#$4D454D20
+	bne		memf3		; the previous block is not free
+	ldy		MEM_NEXT,r1
+	sty		MEM_NEXT,x
+	beq		memf1		; no next block
+	stx		MEM_PREV,y
+memf3:
+	ldy		MEM_NEXT,r1
+	ldx		MEM_FLAG,y
+	cpx		#$4D454D20
+	bne		memf1		; next block not free
+	ldx		MEM_PREV,r1
+	stx		MEM_PREV,y
+	beq		memf1		; no previous block
+	sty		MEM_NEXT,x
+memf1:
+	stz		MEM_SEMA+1
+	ply
+	plx
+memf2:
+	rts
+
 ;------------------------------------------------------------------------------
 ; Bus Error Routine
 ; This routine display a message then restarts the BIOS.
@@ -4686,7 +5302,7 @@ ber1:
 	jsr		KeybdGetChar
 	cmp		#-1
 	beq		ber1
-	jmp		start
+	jmp		ber1
 	
 msgBusErr:
 	db		"Bus error at: ",0
@@ -4695,6 +5311,7 @@ msgDataAddr:
 
 strStartQue:
 	db		1,0,0,0,2,0,0,0,3,1,0,0,4,0,0,0
+;	db		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ;------------------------------------------------------------------------------
 ; 100 Hz interrupt
@@ -4705,12 +5322,14 @@ strStartQue:
 p100Hz:
 	; Handle every other interrupt because 100Hz interrupts may be too fast.
 	pha
+	lda		#3				; reset the edge sense circuit
+	sta		PIC_RSTE
+;	inc		TEXTSCR+83		; update IRQ live indicator on screen
 	lda		IRQFlag
 	ina
 	sta		IRQFlag
 	ror
 	bcc		p100Hz11	
-	stz		0xFFDCFFFC		; clear interrupt
 	pla
 	rti
 
@@ -4734,41 +5353,43 @@ p100Hz11:
 	push	r14
 	push	r15
 	ldx		RunningTCB
-	and		r2,r2,#$FF
 	tsa						; save off the stack pointer
 	sta		TCB_SPSave,x
 	tsr		sp8,r1			; and the eight bit mode stack pointer
 	sta		TCB_SP8Save,x
+	tsr		abs8,r1
+	sta		TCB_ABS8Save,x	; 8 bit emulation base register
 	lda		TCB_Status,x	; set the task status to PREEMPT
 	and		r1,r1,#~TS_RUNNING
 	or		r1,r1,#TS_PREEMPT
 	sta		TCB_Status,x
+p100Hz4:
 
 	; support EhBASIC's IRQ functionality
 	; code derived from minimon.asm
 	lda		#3				; Timer is IRQ #3
 	sta		IrqSource		; stuff a byte indicating the IRQ source for PEEK()
 	lb		r1,IrqBase		; get the IRQ flag byte
-	lsr		r2,r1
-	or		r1,r1,r2
+	lsr		r4,r1
+	or		r1,r1,r4
 	and		#$E0
 	sb		r1,IrqBase
 
-
 	inc		TEXTSCR+83		; update IRQ live indicator on screen
-	stz		0xFFDCFFFC		; clear interrupt
 	
 	; flash the cursor
+	cpx		IOFocusNdx		; only flash the cursor for the task with the IO focus.
+	bne		p100Hz1a
 	lda		CursorFlash		; test if we want a flashing cursor
 	beq		p100Hz1a
 	jsr		CalcScreenLoc	; compute cursor location in memory
 	tay
 	lda		$10000,y		; get color code $10000 higher in memory
-	ldx		IRQFlag			; get counter
-	lsr		r2,r2
-	and		r2,r2,#$0F		; limit to low order nybble
+	ld		r4,IRQFlag		; get counter
+	lsr		r4,r4
+	and		r4,r4,#$0F		; limit to low order nybble
 	and		#$F0			; prepare to or in new value, mask off foreground color
-	or		r1,r1,r2		; set new foreground color for cursor
+	or		r1,r1,r4		; set new foreground color for cursor
 	sta		$10000,y		; store the color code back to memory
 p100Hz1a
 
@@ -4786,7 +5407,7 @@ p100Hz15:
 	bra		p100Hz15				; go back and see if there's another task to be removed
 
 p100Hz14:
-	dea								; decrement the entries timeout
+	dea								; decrement the entry's timeout
 	sta		TCB_Timeout,x
 	
 p100Hz12:
@@ -4827,20 +5448,20 @@ p100Hz5
 	bne		p100Hz2
 
 	; here there were no tasks ready
-	stz		RunningTCB			; select BIOS task
-	ldx		TCB_Status		; flag the task as the running task
-	or		r2,r2,#TS_RUNNING
-	and		r2,r2,#~TS_PREEMPT
-	stx		TCB_Status
+	; this might happen if the interrupt is called before tasks
+	; are setup. Otherwise the IDLE task should at least be running.
+	bra		p100Hz6
 p100Hz3:
 p100Hz10
 	ldx		RunningTCB
-	and		r2,r2,#$FF
+	lda		TCB_ABS8Save,x		; 8 bit emulation base register
+	trs		r1,abs8
 	lda		TCB_SP8Save,x		; get back eight bit stack pointer
 	trs		r1,sp8
 	ldx		TCB_SPSave,x		; get back stack pointer
 	txs
 	; restore registers
+p100Hz6:
 	pop		r15
 	pop		r14
 	pop		r13
@@ -4866,16 +5487,161 @@ p100Hz10
 ;------------------------------------------------------------------------------
 ;
 p1000Hz:
-	stz		0xFFDCFFFD				; acknowledge interrupt
+	pha
+	lda		#2						; reset edge sense circuit
+	sta		PIC_RSTE
 	inc		Milliseconds			; increment milliseconds count
+	inc		TEXTSCR+82				; update IRQ live indicator on screen
+	pla
 	rti
 
+;------------------------------------------------------------------------------
+; Sleep interrupt
+; This interrupt just selects another task to run. The current task is
+; stuck in an infinite loop.
+;------------------------------------------------------------------------------
 slp_rout:
+	cld		; clear extended precision mode
+	pha
+	phx
+	phy
+	push	r4
+	push	r5
+	push	r6
+	push	r7
+	push	r8
+	push	r9
+	push	r10
+	push	r11
+	push	r12
+	push	r13
+	push	r14
+	push	r15
+	ldx		RunningTCB
+	bmi		RunningTCBErr
+	and		r2,r2,#$FF
+	tsa						; save off the stack pointer
+	sta		TCB_SPSave,x
+	tsr		sp8,r1			; and the eight bit mode stack pointer
+	sta		TCB_SP8Save,x
+	lda		TCB_Status,x	; set the task status to SLEEP
+	and		r1,r1,#~TS_RUNNING
+	or		r1,r1,#TS_SLEEP
+	sta		TCB_Status,x
+slp1:
+	jmp		SelectTaskToRun
+
+;------------------------------------------------------------------------------
+; Check for and emulate unsupoorted instructions.
+;------------------------------------------------------------------------------
+InvalidOpIRQ:
+	pha
+	phx
+	phy
+	tsx
+	lda		4,x		; get the address of the invalid op off the stack
+	lb		r3,0,r1	; get the opcode byte
+	cpy		#$44	; is it MVP ?
+	beq		EmuMVP
+	cpy		#$54	; is it MVN ?
+	beq		EmuMVN
+	; We don't know what the op is. Treat it like a NOP
+	; Increment the address and return.
+	pha
+	lda		#msgUnimp
+	jsr		DisplayStringB
+	pla
+	jsr		DisplayWord
+	jsr		CRLF
+	ina
+	sta		4,x		; save incremented return address back to stack
+	ldx		#64
+ioi1:
+	tsr		abs8,r1
+	jsr		DisplayWord
+	lda		#' '
+	jsr		DisplayChar
+	dex
+	bne		ioi1
+	jsr		CRLF
+	ply
+	plx
+	pla
 	rti
+
+EmuMVP:
+	push	r4
+	push	r5
+	tsr		sp,r4
+	lda		4,r4
+	ldx		3,r4
+	ldy		2,r4
+EmuMVP1:
+	ld		r5,(x)
+	st		r5,(y)
+	dex
+	dey
+	dea
+	cmp		#$FFFFFFFF
+	bne		EmuMVP1
+	sta		4,r4
+	stx		3,r4
+	sty		2,r4
+	inc		6,r4		; increment the return address by one.
+	pop		r5
+	pop		r4
+	ply
+	plx
+	pla
+	rti
+
+EmuMVN:
+	push	r4
+	push	r5
+	tsr		sp,r4
+	lda		4,r4
+	ldx		3,r4
+	ldy		2,r4
+EmuMVN1:
+	ld		r5,(x)
+	st		r5,(y)
+	inx
+	iny
+	dea
+	cmp		#$FFFFFFFF
+	bne		EmuMVN1
+	sta		4,r4
+	stx		3,r4
+	sty		2,r4
+	inc		6,r4		; increment the return address by one.
+	pop		r5
+	pop		r4
+	ply
+	plx
+	pla
+	rti
+
+msgUnimp:
+	db	"Unimplemented at: ",0
+
 brk_rout:
 	rti
-nmirout
+nmirout:
+	pha
+	phx
+	lda		#msgPerr
+	jsr		DisplayStringB
+	tsx
+	lda		4,x
+	jsr		DisplayWord
+	jsr		CRLF
+	plx
+	pla
 	rti
+
+msgPerr:
+	db	"Parity error at: ",0
+
 message "1298"
 include "TinyBasic65002.asm"
 message "1640"
