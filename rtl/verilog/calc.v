@@ -21,13 +21,16 @@
 // Extra state required for some datapath operations.                       
 // ============================================================================
 //
-CALC:
+task calc_tsk;
 	begin
 		state <= IFETCH;
-		res <= calc_res;
+		res <= alu_out;
 		wadr <= radr; 			// These two lines for the shift/inc/dec ops
 		store_what <= `STW_CALC;
-		case(ir[7:0])
+		case(ir9)
+		`BMS_ZPX,`BMS_ABS,`BMS_ABSX,
+		`BMC_ZPX,`BMC_ABS,`BMC_ABSX,
+		`BMF_ZPX,`BMF_ABS,`BMF_ABSX,
 		`ASL_ZPX,`ASL_ABS,`ASL_ABSX,
 		`ROL_ZPX,`ROL_ABS,`ROL_ABSX,
 		`LSR_ZPX,`LSR_ABS,`LSR_ABSX,
@@ -37,3 +40,4 @@ CALC:
 			state <= STORE1;
 		endcase
 	end
+endtask

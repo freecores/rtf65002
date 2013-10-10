@@ -24,7 +24,7 @@
 
 // This table being setup to set the pc increment. It should synthesize to a ROM.
 module rtf65002_pcinc(opcode,suppress_pcinc,inc);
-input [7:0] opcode;
+input [8:0] opcode;
 input [3:0] suppress_pcinc;
 output reg [3:0] inc;
 
@@ -41,9 +41,6 @@ if (suppress_pcinc==4'hF)
 	`TRS,`TSR: inc <= 4'd2;
 	`INY,`DEY,`INX,`DEX,`INA,`DEA: inc <= 4'd1;
 	`EMM: inc <= 4'd1;
-	`PHA,`PHX,`PHY,`PHP: inc <= 4'd1;
-	`PLA,`PLX,`PLY,`PLP: inc <= 4'd1;
-	`PUSH,`POP: inc <= 4'd2;
 	`STP,`WAI: inc <= 4'd1;
 	`JMP,`JML,`JMP_IND,`JMP_INDX,`JMP_RIND,
 	`JSR,`JSR_RIND,`JSL,`BSR,`JSR_INDX,`RTS,`RTL,`RTI: inc <= 4'd0;
@@ -54,10 +51,13 @@ if (suppress_pcinc==4'hF)
 	`RR: inc <= 4'd3;
 	`LD_RR:	inc <= 4'd2;
 	`ADD_IMM8,`SUB_IMM8,`AND_IMM8,`OR_IMM8,`EOR_IMM8,`ASL_IMM8,`LSR_IMM8:	inc <= 4'd3;
+	`MUL_IMM8,`DIV_IMM8,`MOD_IMM8: inc <= 4'd3;
 	`LDX_IMM8,`LDA_IMM8,`CMP_IMM8,`SUB_SP8: inc <= 4'd2;
 	`ADD_IMM16,`SUB_IMM16,`AND_IMM16,`OR_IMM16,`EOR_IMM16:	inc <= 4'd4;
+	`MUL_IMM16,`DIV_IMM16,`MOD_IMM16: inc <= 4'd4;
 	`LDX_IMM16,`LDA_IMM16,`SUB_SP16: inc <= 4'd3;
 	`ADD_IMM32,`SUB_IMM32,`AND_IMM32,`OR_IMM32,`EOR_IMM32:	inc <= 4'd6;
+	`MUL_IMM32,`DIV_IMM32,`MOD_IMM32: inc <= 4'd6;
 	`LDX_IMM32,`LDY_IMM32,`LDA_IMM32,`SUB_SP32,`CPX_IMM32,`CPY_IMM32: inc <= 4'd5;
 	`ADD_ZPX,`SUB_ZPX,`AND_ZPX,`OR_ZPX,`EOR_ZPX: inc <= 4'd4;
 	`ADD_IX,`SUB_IX,`AND_IX,`OR_IX,`EOR_IX: inc <= 4'd4;
@@ -70,24 +70,30 @@ if (suppress_pcinc==4'hF)
 	`ASL_RR,`ROL_RR,`LSR_RR,`ROR_RR,`INC_RR,`DEC_RR: inc <= 4'd2;
 	`ST_RIND: inc <= 4'd2;
 	`LDX_ZPX,`LDY_ZPX,`ST_DSP,`STX_ZPX,`STY_ZPX,`CPX_ZPX,`CPY_ZPX,
+	`BMS_ZPX,`BMC_ZPX,`BMF_ZPX,`BMT_ZPX,
 	`ASL_ZPX,`ROL_ZPX,`LSR_ZPX,`ROR_ZPX,`INC_ZPX,`DEC_ZPX,
-	`ADD_DSP,`SUB_DSP,`OR_DSP,`AND_DSP,`EOR_DSP,
-	`ADD_RIND,`SUB_RIND,`OR_RIND,`AND_RIND,`EOR_RIND: inc <= 4'd3;
+	`ADD_DSP,`SUB_DSP,`OR_DSP,`AND_DSP,`EOR_DSP: inc <= 4'd3;
 	`ORB_ZPX,`ST_ZPX,`STB_ZPX,`ADD_ZPX,`SUB_ZPX,`OR_ZPX,`AND_ZPX,`EOR_ZPX,
 	`ADD_IX,`SUB_IX,`OR_IX,`AND_IX,`EOR_IX,`ST_IX,
 	`ADD_IY,`SUB_IY,`OR_IY,`AND_IY,`EOR_IY,`ST_IY: inc <= 4'd4;
 	`LDX_ABS,`LDY_ABS,`STX_ABS,`STY_ABS,
+	`BMS_ABS,`BMC_ABS,`BMF_ABS,`BMT_ABS,
 	`ASL_ABS,`ROL_ABS,`LSR_ABS,`ROR_ABS,`INC_ABS,`DEC_ABS,`CPX_ABS,`CPY_ABS: inc <= 4'd5;
 	`ORB_ABS,`LDX_ABSY,`LDY_ABSX,`ST_ABS,`STB_ABS,
 	`ADD_ABS,`SUB_ABS,`OR_ABS,`AND_ABS,`EOR_ABS,
+	`BMS_ABSX,`BMC_ABSX,`BMF_ABSX,`BMT_ABSX,
 	`ASL_ABSX,`ROL_ABSX,`LSR_ABSX,`ROR_ABSX,`INC_ABSX,`DEC_ABSX: inc <= 4'd6;
 	`ORB_ABSX,`ST_ABSX,`STB_ABSX,
 	`ADD_ABSX,`SUB_ABSX,`OR_ABSX,`AND_ABSX,`EOR_ABSX: inc <= 4'd7;
 	`PHP,`PHA,`PHX,`PHY,`PLP,`PLA,`PLX,`PLY: inc <= 4'd1;
 	`PUSH,`POP: inc <= 4'd2;
-	`MVN,`MVP,`STS: inc <= 4'd1;
+	`MVN,`MVP,`STS: inc <= 4'd0;
+	`PG2:	inc <= 4'd1;
+	`TON,`TOFF:	inc <= 4'd1;
+	`PUSHA,`POPA: inc <= 4'd1;
 	default:	inc <= 4'd0;	// unimplemented instruction
 	endcase
 else
 	inc <= 4'd0;
 endmodule
+

@@ -47,16 +47,18 @@ STORE1:
 		`STW_PC:	dat_o <= pc;
 		`STW_PC2:	dat_o <= pc + 32'd2;
 		`STW_PCHWI:	dat_o <= pc+{30'b0,~hwi,1'b0};
+		`STW_OPC:	dat_o <= opc;
 		`STW_SR:	dat_o <= sr;
 		`STW_RFA:	dat_o <= rfoa;
 		`STW_RFA8:	dat_o <= {4{rfoa[7:0]}};
 		`STW_A:		dat_o <= a;
 		`STW_B:		dat_o <= b;
-		`STW_CALC:	dat_o <= calc_res;
+		`STW_CALC:	dat_o <= res;
 `ifdef SUPPORT_EM8
 		`STW_ACC8:	dat_o <= {4{acc8}};
 		`STW_X8:	dat_o <= {4{x8}};
 		`STW_Y8:	dat_o <= {4{y8}};
+		`STW_Z8:	dat_o <= {4{8'h00}};
 		`STW_PC3124:	dat_o <= {4{pc[31:24]}};
 		`STW_PC2316:	dat_o <= {4{pc[23:16]}};
 		`STW_PC158:		dat_o <= {4{pc[15:8]}};
@@ -81,8 +83,14 @@ STORE2:
 			retstate <= MVN3;
 		end
 		else begin
-			state <= IFETCH;
-			retstate <= IFETCH;
+			if (em) begin
+				state <= BYTE_IFETCH;
+				retstate <= BYTE_IFETCH;
+			end
+			else begin
+				state <= IFETCH;
+				retstate <= IFETCH;
+			end
 		end
 		lock_o <= 1'b0;
 		cyc_o <= 1'b0;
@@ -92,8 +100,8 @@ STORE2:
 		adr_o <= 34'h0;
 		dat_o <= 32'h0;
 		case(store_what)
-		`STW_PC,`STW_PC2,`STW_PCHWI:
-			if (isBrk) begin
+		`STW_PC,`STW_PC2,`STW_PCHWI,`STW_OPC:
+			if (isBrk|isBusErr) begin
 				radr <= isp_dec;
 				wadr <= isp_dec;
 				isp <= isp_dec;
@@ -102,48 +110,121 @@ STORE2:
 				retstate <= STORE1;
 			end
 		`STW_SR:
-			if (isBrk) begin
+			if (isBrk|isBusErr) begin
 				load_what <= `PC_310;
 				state <= LOAD_MAC1;
 				retstate <= LOAD_MAC1;
 				radr <= vect[31:2];
-				if (hwi)
-					im <= 1'b1;
+				ttrig <= 1'b0;
+				tf <= 1'b0;			// turn off trace mode
+				im <= 1'b1;
 				em <= 1'b0;			// make sure we process in native mode; we might have been called up during emulation mode
+			end
+		`STW_RFA:
+			if (isPusha) begin
+				if (ir[11:8]==4'hF) begin
+					state <= IFETCH;
+					retstate <= IFETCH;
+				end
+				else begin
+					state <= STORE1;
+					retstate <= STORE1;
+					radr <= isp_dec;
+					wadr <= isp_dec;
+					isp <= isp_dec;
+				end
+				ir[11:8] <= ir[11:8] + 4'd1;
 			end
 `ifdef SUPPORT_EM8
 		`STW_PC3124:
 			begin
+				radr <= {spage[31:8],sp[7:2]};
+				wadr <= {spage[31:8],sp[7:2]};
+				radr2LSB <= sp[1:0];
+				wadr2LSB <= sp[1:0];
 				store_what <= `STW_PC2316;
+				sp <= sp_dec;
 				state <= STORE1;
 			end
 		`STW_PC2316:
 			begin
+				radr <= {spage[31:8],sp[7:2]};
+				wadr <= {spage[31:8],sp[7:2]};
+				radr2LSB <= sp[1:0];
+				wadr2LSB <= sp[1:0];
+				sp <= sp_dec;
 				store_what <= `STW_PC158;
 				state <= STORE1;
 			end
 		`STW_PC158:
 			begin
+				radr <= {spage[31:8],sp[7:2]};
+				wadr <= {spage[31:8],sp[7:2]};
+				radr2LSB <= sp[1:0];
+				wadr2LSB <= sp[1:0];
+				sp <= sp_dec;
 				store_what <= `STW_PC70;
 				state <= STORE1;
 			end
 		`STW_PC70:
 			begin
+				case({1'b0,ir[7:0]})
+				`BRK: 	begin
+						radr <= {spage[31:8],sp[7:2]};
+						wadr <= {spage[31:8],sp[7:2]};
+						radr2LSB <= sp[1:0];
+						wadr2LSB <= sp[1:0];
+						sp <= sp_dec;
+						store_what <= `STW_SR70;
+						state <= STORE1;
+						end
+				`JSR: 	begin
+						pc <= ir[23:8];
+						$display("setting pc=%h", ir[23:8]);
+						end
+				`JSL: 	begin
+						pc <= ir[39:8];
+						end
+				`JSR_INDX:
+						begin
+						state <= LOAD_MAC1;
+						retstate <= LOAD_MAC1;
+						load_what <= `PC_70;
+						radr <= absx_address[31:2];
+						radr2LSB <= absx_address[1:0];
+						end
+				endcase
+			end
+		`STW_SR70:
+			begin
 				if (ir[7:0]==`BRK) begin
-					store_what <= `STW_SR70;
-					state <= STORE1;
+					load_what <= `PC_70;
+					state <= LOAD_MAC1;
+					retstate <= LOAD_MAC1;
+					pc[31:16] <= abs8[31:16];
+					radr <= vect[31:2];
+					radr2LSB <= vect[1:0];
+					im <= hwi;
 				end
 			end
 `endif
+		default:
+			if (isJsrIndx) begin
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
+				retstate <= LOAD_MAC1;
+				radr <= ir[39:8] + x;
+			end
+			else if (isJsrInd) begin
+				load_what <= `PC_310;
+				state <= LOAD_MAC1;
+				retstate <= LOAD_MAC1;
+				radr <= ir[39:8];
+			end
 		endcase
 `ifdef SUPPORT_DCACHE
-		if (dhit) begin
-			wrsel <= sel_o;
-			wr <= 1'b1;
-		end
-		else if (write_allocate) begin
-			dmiss <= `TRUE;
-			state <= WAIT_DHIT;
+		if (!dhit && write_allocate) begin
+			state <= DCACHE1;
 		end
 `endif
 	end

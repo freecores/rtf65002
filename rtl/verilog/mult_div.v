@@ -23,16 +23,9 @@
 //                                                                          
 // ============================================================================
 //
-`define SUPPORT_DIVMOD		1'b1
+`include "rtf65002_defines.v"
 
-`define MUL		4'd8
-`define MULS	4'd9
-`define DIV		4'd10
-`define DIVS	4'd11
-`define MOD		4'd12
-`define MODS	4'd13
-
-module mult_div(rst, clk, ld, op, a, b, p, q, r, done);
+module mult_div(rst, clk, ld, op, fn, a, b, p, q, r, done);
 parameter IDLE=3'd0;
 parameter MULT=3'd1;
 parameter FIX_SIGN=3'd2;
@@ -40,7 +33,8 @@ parameter DIV=3'd3;
 input rst;
 input clk;
 input ld;
-input [3:0] op;
+input [8:0] op;
+input [3:0] fn;
 input [31:0] a;
 input [31:0] b;
 output reg [63:0] p;
@@ -67,22 +61,16 @@ IDLE:
 	if (ld) begin
 		cnt <= 6'd32;
 		case(op)
-		`MUL:
+		`MUL_IMM8,`MUL_IMM16,`MUL_IMM32:
 			begin
 				aa <= a;
 				bb <= b;
 				res_sgn <= 1'b0;
 				state <= MULT;
 			end
-		`MULS:
-			begin
-				aa <= a[31] ? -a : a;
-				bb <= b[31] ? -b : b;
-				res_sgn <= a[31] ^ b[31];
-				state <= MULT;
-			end
 `ifdef SUPPORT_DIVMOD
-		`DIV,`MOD:
+		`DIV_IMM8,`DIV_IMM16,`DIV_IMM32,
+		`MOD_IMM8,`MOD_IMM16,`MOD_IMM32:
 			begin
 				aa <= a;
 				bb <= b;
@@ -91,18 +79,46 @@ IDLE:
 				res_sgn <= 1'b0;
 				state <= DIV;
 			end
-		`DIVS,`MODS:
-			begin
-				aa <= a[31] ? -a : a;
-				bb <= b[31] ? -b : b;
-				q <= pa[30:0];
-				r <= pa[31];
-				res_sgn <= a[31] ^ b[31];
-				state <= DIV;
-			end
 `endif
-		default:
-			state <= IDLE;
+		`RR:
+			case(fn)
+			`MUL_RR:
+				begin
+					aa <= a;
+					bb <= b;
+					res_sgn <= 1'b0;
+					state <= MULT;
+				end
+			`MULS_RR:
+				begin
+					aa <= a[31] ? -a : a;
+					bb <= b[31] ? -b : b;
+					res_sgn <= a[31] ^ b[31];
+					state <= MULT;
+				end
+`ifdef SUPPORT_DIVMOD
+			`DIV_RR,`MOD_RR:
+				begin
+					aa <= a;
+					bb <= b;
+					q <= a[30:0];
+					r <= a[31];
+					res_sgn <= 1'b0;
+					state <= DIV;
+				end
+			`DIVS_RR,`MODS_RR:
+				begin
+					aa <= a[31] ? -a : a;
+					bb <= b[31] ? -b : b;
+					q <= pa[30:0];
+					r <= pa[31];
+					res_sgn <= a[31] ^ b[31];
+					state <= DIV;
+				end
+`endif
+			default:
+				state <= IDLE;
+			endcase
 		endcase
 	end
 MULT:
@@ -166,7 +182,8 @@ mult_div umd1 (
 	.rst(rst),
 	.clk(clk),
 	.ld(ld),
-	.op(`DIV),
+	.op(`RR),
+	.fn(`DIV_RR),
 	.a(32'h12345678),
 	.b(32'd10),
 	.p(),

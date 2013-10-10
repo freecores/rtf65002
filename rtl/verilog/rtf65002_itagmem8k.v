@@ -20,38 +20,59 @@
 //                                                                          
 // ============================================================================
 //
-module rtf65002_dtagmem(wclk, wr, wadr, cr, rclk, radr, hit);
+module rtf65002_itagmem8k(wclk, wr, adr, rclk, pc, hit0, hit1);
 input wclk;
 input wr;
-input [31:0] wadr;
-input cr;
+input [33:0] adr;
 input rclk;
-input [31:0] radr;
-output hit;
+input [31:0] pc;
+output hit0;
+output hit1;
 
-reg [31:0] rradr;
-wire [31:0] tag;
-
-syncRam512x32_1rw1r u1
-	(
-		.wrst(1'b0),
-		.wclk(wclk),
-		.wce(wadr[1:0]==2'b11),
-		.we(wr),
-		.wadr(wadr[10:2]),
-		.i({wadr[31:1],cr}),
-		.wo(),
-		.rrst(1'b0),
-		.rclk(rclk),
-		.rce(1'b1),
-		.radr(radr[10:2]),
-		.o(tag)
-	);
-
+wire [31:0] pcp8 = pc + 32'd8;
+wire [31:0] tag0;
+wire [31:0] tag1;
+reg [31:0] rpc;
+reg [31:0] rpcp8;
 
 always @(posedge rclk)
-	rradr <= radr;
-	
-assign hit = tag[31:11]==rradr[31:11] && tag[0];
+	rpc <= pc;
+always @(posedge rclk)
+	rpcp8 <= pcp8;
+
+syncRam512x32_1rw1r ram0 (
+	.wrst(1'b0),
+	.wclk(wclk),
+	.wce(adr[3:2]==2'b11),
+	.we(wr),
+	.wadr(adr[12:4]),
+	.i(adr[31:0]),
+	.wo(),
+
+	.rrst(1'b0),
+	.rclk(rclk),
+	.rce(1'b1),
+	.radr(pc[12:4]),
+	.o(tag0)
+);
+
+syncRam512x32_1rw1r ram1 (
+	.wrst(1'b0),
+	.wclk(wclk),
+	.wce(adr[3:2]==2'b11),
+	.we(wr),
+	.wadr(adr[12:4]),
+	.i(adr[31:0]),
+	.wo(),
+
+	.rrst(1'b0),
+	.rclk(rclk),
+	.rce(1'b1),
+	.radr(pcp8[12:4]),
+	.o(tag1)
+);
+
+assign hit0 = tag0[31:13]==rpc[31:13] && tag0[0];
+assign hit1 = tag1[31:13]==rpcp8[31:13] && tag1[0];
 
 endmodule

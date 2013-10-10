@@ -20,38 +20,24 @@
 //                                                                          
 // ============================================================================
 //
-module rtf65002_dtagmem(wclk, wr, wadr, cr, rclk, radr, hit);
-input wclk;
-input wr;
-input [31:0] wadr;
-input cr;
-input rclk;
-input [31:0] radr;
-output hit;
-
-reg [31:0] rradr;
-wire [31:0] tag;
-
-syncRam512x32_1rw1r u1
-	(
-		.wrst(1'b0),
-		.wclk(wclk),
-		.wce(wadr[1:0]==2'b11),
-		.we(wr),
-		.wadr(wadr[10:2]),
-		.i({wadr[31:1],cr}),
-		.wo(),
-		.rrst(1'b0),
-		.rclk(rclk),
-		.rce(1'b1),
-		.radr(radr[10:2]),
-		.o(tag)
-	);
-
-
-always @(posedge rclk)
-	rradr <= radr;
-	
-assign hit = tag[31:11]==rradr[31:11] && tag[0];
-
-endmodule
+`ifdef SUPPORT_STRING
+MVN3:
+	begin
+		state <= IFETCH;
+		res <= alu_out;
+		if (acc==32'hFFFFFFFF)
+			pc <= pc + 32'd1;
+	end
+CMPS1:
+	begin
+		state <= IFETCH;
+		res <= alu_out;
+		if (a!=b || acc==32'hFFFFFFFF) begin
+			cf <= !(ltu|eq);
+			nf <= lt;
+			vf <= 1'b0;
+			zf <= eq;
+			pc <= pc + 32'd1;
+		end
+	end
+`endif
