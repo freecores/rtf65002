@@ -1,3 +1,4 @@
+
 ; ============================================================================
 ;        __
 ;   \\__/ o\    (C) 2013  Robert Finch, Stratford
@@ -79,6 +80,7 @@ FCB_DE_ATTR		=0x20
 FCB_DE_DATETIME	=0x28
 FCB_DE_CLUSTER	=0x30	; starting cluster of file
 FCB_DE_SIZE		=0x34	; 6 byte file size
+
 FCB_DIR_SECTOR	=0x40	; LBA directory sector this is from
 FCB_DIR_ENT		=0x44	; offset in sector for dir entry
 FCB_LDRV		=0x48	; logical drive this is on
@@ -203,6 +205,14 @@ rxfull		EQU		0x01
 CONFIGREC	EQU		0xFFDCFFF0
 CR_CLOCK	EQU		0xFFDCFFF4
 GACCEL		EQU		0xFFDAE000
+GA_X0		EQU		0xFFDAE002
+GA_Y0		EQU		0xFFDAE003
+GA_PEN		EQU		0xFFDAE000
+GA_X1		EQU		0xFFDAE004
+GA_Y1		EQU		0xFFDAE005
+GA_STATE	EQU		0xFFDAE00E
+GA_CMD		EQU		0xFFDAE00F
+
 AC97		EQU		0xFFDC1000
 PSG			EQU		0xFFD50000
 PSGFREQ0	EQU		0xFFD50000
@@ -232,6 +242,42 @@ ETH_MAC_ADDR1	EQU		0x11
 ETH_HASH0_ADDR	EQU		0x12
 ETH_HASH1_ADDR	EQU		0x13
 ETH_TXCTRL		EQU		0x14
+
+ETH_WCTRLDATA	EQU		4
+ETH_MIICOMMAND_RSTAT	EQU	2
+ETH_MIISTATUS_BUSY	EQU		2
+ETH_MIIMODER_RST	EQU		$200
+ETH_MODER_RST       EQU		$800
+ETH_MII_BMCR		EQU		0		; basic mode control register
+ETH_MII_ADVERTISE	EQU		4
+ETH_MII_EXPANSION       =6
+ETH_MII_CTRL1000        =9
+ETH_ADVERTISE_ALL	EQU		$1E0
+ETH_ADVERTISE_1000FULL      =0x0200  ; Advertise 1000BASE-T full duplex
+ETH_ADVERTISE_1000HALF      =0x0100  ; Advertise 1000BASE-T half duplex
+ETH_ESTATUS_1000_TFULL	=0x2000	; Can do 1000BT Full
+ETH_ESTATUS_1000_THALF	=0x1000	; Can do 1000BT Half
+ETH_BMCR_ANRESTART      =    0x0200  ; Auto negotiation restart    
+ETH_BMCR_ISOLATE        =    0x0400  ; Disconnect DP83840 from MII
+ETH_BMCR_PDOWN          =    0x0800  ; Powerdown the DP83840     
+ETH_BMCR_ANENABLE       =    0x1000  ; Enable auto negotiation    
+
+ETH_PHY		=7
+
+MMU			EQU		0xFFDC4000
+MMU_KVMMU	EQU		0xFFDC4800
+MMU_FUSE	EQU		0xFFDC4811
+MMU_AKEY	EQU		0xFFDC4812
+MMU_OKEY	EQU		0xFFDC4813
+MMU_MAPEN	EQU		0xFFDC4814
+
+DATETIME	EQU		0xFFDC0400
+DATETIME_TIME		EQU		0xFFDC0400
+DATETIME_DATE		EQU		0xFFDC0401
+DATETIME_ALMTIME	EQU		0xFFDC0402
+DATETIME_ALMDATE	EQU		0xFFDC0403
+DATETIME_CTRL		EQU		0xFFDC0404
+DATETIME_SNAPSHOT	EQU		0xFFDC0405
 
 SPRITEREGS	EQU		0xFFDAD000
 SPRRAM		EQU		0xFFD80000
@@ -293,6 +339,7 @@ TCB_iof_prev	EQU		0x05FBD700
 TCB_SP8Save		EQU		0x05FBD800	; TCB_SP8Save area 
 TCB_SPSave		EQU		0x05FBD900	; TCB_SPSave area
 TCB_ABS8Save	EQU		0x05FBDA00
+TCB_mmu_map		EQU		0x05FBDB00
 
 KeybdHead	EQU		0x05FBEA00
 KeybdTail	EQU		0x05FBEB00
@@ -303,7 +350,7 @@ KeybdLocks	EQU		0x05FBEF00
 KeybdBuffer	EQU		0x05FBF000	; buffer is 16 chars
 
 HeapStart	EQU		0x04200000
-HeapEnd		EQU		0x05AFFFFF
+HeapEnd		EQU		0x043FFFFF
 
 ; Bitmap of tasks requesting the I/O focus
 ;
@@ -318,17 +365,12 @@ IrqBase		EQU		0xDF
 ;
 ; TinyBasic AREA = 0xF00 to 0xF7F
 
-HeadRdy0	EQU		0xF80
-HeadRdy1	EQU		HeadRdy0+1
-HeadRdy2	EQU		HeadRdy1+1
-HeadRdy3	EQU		HeadRdy2+1
-HeadRdy4	EQU		HeadRdy3+1
-TailRdy0	EQU		HeadRdy4+1
-TailRdy1	EQU		TailRdy0+1
-TailRdy2	EQU		TailRdy1+1
-TailRdy3	EQU		TailRdy2+1
-TailRdy4	EQU		TailRdy3+1
-FreeTCB		EQU		TailRdy4+1
+QNdx0		EQU		0xF80
+QNdx1		EQU		QNdx0+1
+QNdx2		EQU		QNdx1+1
+QNdx3		EQU		QNdx2+1
+QNdx4		EQU		QNdx3+1
+FreeTCB		EQU		QNdx4+1
 TimeoutList	EQU		FreeTCB+1
 RunningTCB		EQU		TimeoutList+1
 FreeMbx		EQU		RunningTCB + 1
@@ -373,6 +415,10 @@ RdyQueTick	EQU		0xFC7
 eth_unique_id	EQU		0xFC8
 LineColor	EQU		0xFC9
 QIndex		EQU		0xFCA
+ROMcs		EQU		0xFCB
+mmu_present	EQU		0xFCC
+TestTask	EQU		0xFCD
+KeybdIsSetup	EQU		0xFCE
 
 Uart_rxfifo		EQU		0x05FBC000
 Uart_rxhead		EQU		0xFD0
@@ -398,6 +444,7 @@ startSector	EQU		0xFF0
 message "jump table"
 	; jump table of popular BIOS routines
 	org		$FFFF8000
+ROMStart:
 	dw	DisplayChar
 	dw	KeybdCheckForKeyDirect
 	dw	KeybdGetCharDirect
@@ -424,7 +471,18 @@ start
 	ldx		#BIOS_STACKS+0x03FF	; setup stack pointer top of memory
 	txs
 	trs		r0,abs8			; set 8 bit mode absolute address offset
-
+	lda		#3
+	trs		r1,cc			; enable dcache and icache
+	jsr		ROMChecksum
+	sta		ROMcs
+	stz		mmu_present		; assume no mmu
+	lda		CONFIGREC
+	bit		#4096
+	beq		st_nommu
+	jsr		InitMMU			; setup the maps and enable the mmu
+	lda		#1
+	sta		mmu_present
+st_nommu:
 	jsr		MemInit			; Initialize the heap
 
 	lda		#2
@@ -435,10 +493,19 @@ start
 							; also sets nmoi policy (native mode on interrupt)
 	trs		r2,vbr
 	dex
+	phx
+	txy						; y = pointer to vector table
+	lda		#511			; 512 vectors to setup
+	ldx		#brk_rout		; point vector to brk routine
+	stos
+
+	plx
 	lda		#brk_rout
 	sta		(x)
 	lda		#slp_rout
 	sta		1,x
+	lda		#reschedule
+	sta		2,x
 	lda		#KeybdRST
 	sta		448+1,x
 	lda		#p1000Hz
@@ -468,35 +535,28 @@ start
 
 	lda		#-1
 	sta		TimeoutList		; no entries in timeout list
-	sta		HeadRdy0		; task zero (the BIOS task) is always present
-	sta		HeadRdy1
-	sta		HeadRdy2
-	sta		HeadRdy3
-	sta		HeadRdy4
-	sta		TailRdy0
-	sta		TailRdy1
-	sta		TailRdy2
-	sta		TailRdy3
-	sta		TailRdy4
+	sta		QNdx0
+	sta		QNdx1
+	sta		QNdx2
+	sta		QNdx3
+	sta		QNdx4
 
 
 	; Initialize IO Focus List
 	;
-	ldx		#1
-st5:
-	stz		IOFocusTbl,x
-	inx
-	cpx		#8
-	bne		st5
+	lda		#7
+	ldx		#0
+	ldy		#IOFocusTbl
+	stos
 
-	ldx		#1
-	lda		#-1
-st9:
-	sta		TCB_iof_next,x
-	sta		TCB_iof_prev,x
-	inx
-	cpx		#256
-	bne		st9
+	lda		#255
+	ldx		#-1
+	ldy		#TCB_iof_next
+	stos
+	lda		#255
+	ldx		#-1
+	ldy		#TCB_iof_prev
+	stos
 
 	; Initialize free message list
 	lda		#8192
@@ -546,12 +606,10 @@ st2:
 	sta		LEDS
 
 	; Manually setup the BIOS task
-	lda		#-1
 	stz		RunningTCB		; BIOS is task #0
-	sta		TCB_NxtRdy		; manually build the ready list
-	sta		TCB_PrvRdy
-	stz		HeadRdy0		; insert at priority 4
-	stz		TailRdy0
+	stz		TCB_NxtRdy		; manually build the ready list
+	stz		TCB_PrvRdy
+	stz		QNdx0			; insert at priority 0
 	stz		TCB_iof_next	; manually build the IO focus list
 	stz		TCB_iof_prev
 	stz		IOFocusNdx		; task #0 has the focus
@@ -559,11 +617,12 @@ st2:
 	sta		IOFocusTbl		; set the task#0 request bit
 	lda		#0
 	sta		TCB_Priority
+	stz		TCB_Timeout
 	lda		#TS_RUNNING|TS_READY
 	sta		TCB_Status
 	stz		TCB_CursorRow
 	stz		TCB_CursorCol
-	
+
 	lda		#1
 	sta		MBX_SEMA
 	sta		IOF_LIST_SEMA
@@ -576,11 +635,15 @@ st2:
 	sta		CursorFlash
 	jsr		ClearScreen
 	jsr		ClearBmpScreen
+	jsr		PICInit
+	; Enable interrupts
+	; This will likely cause an interrupt right away because the timer
+	; pulses run since power-up.
+	cli						
 	lda		#4
 	ldx		#0
 	ldy		#IdleTask
 	jsr		StartTask
-	jsr		PICInit
 	lda		CONFIGREC		; do we have a serial port ?
 	bit		#32
 	beq		st7
@@ -618,6 +681,11 @@ st8:
 	lda		#msgStart
 	jsr		DisplayStringB
 	jsr		ReportMemFree
+	lda		#msgChecksum
+	jsr		DisplayStringB
+	lda		ROMcs
+	jsr		DisplayWord
+	jsr		CRLF
 	lda		#10
 	sta		LEDS
 
@@ -627,10 +695,10 @@ st8:
 	bit		#4
 	beq		st6
 	jsr		SetupAC97
-	lda		#2
+	lda		#4
 	ldx		#0
 	ldy		#Beep
-	jsr		StartTask
+;	jsr		StartTask
 st6:
 	lda		#11
 	sta		LEDS
@@ -643,6 +711,84 @@ st1
 	
 msgStart
 	db		"RTF65002 system starting.",$0d,$0a,00
+
+;------------------------------------------------------------------------------
+; InitMMU
+;
+; Initialize the 64 maps of the MMU.
+; Initially all the maps are set the same:
+; Virtual Page  Physical Page
+; 000-255		 000-255
+; 256-511		1792-2047
+; Note that there are only 512 virtual pages per map, and 2048 real
+; physical pages of memory. This limits maps to 32MB.
+; This range includes the BIOS assigned stacks for the tasks and tasks
+; virtual video buffers. It also includes the bitmap screen buffer.
+; Note that physical pages 256 to 1791 are not mapped, but do exist.
+; If changing the maps the last 128 pages (8MB) of the map should always point
+; to the BIOS area. Don't change map entries 384-511 or the system may
+; crash.
+; If the rts at the end of this routine works, then memory was mapped
+; successfully.
+;------------------------------------------------------------------------------
+InitMMU:
+	lda		#1
+	sta		MMU_KVMMU+1
+	dea
+	sta		MMU_KVMMU
+immu1:
+	sta		MMU_AKEY	; set access key for map
+	ldy		#0		; 
+	ldx		#0
+immu2:
+	; set the first 256 pages to physical page 0-255
+	; set the last 256 pages to physical page 1792-2047
+	ld		r4,r3
+	bit		r3,#$0100
+	beq		immu3
+	add		r4,r4,#1536
+immu3:
+	st		r4,MMU,x
+	iny
+	inx
+	cpx		#512
+	bne		immu2
+	ina
+	cmp		#64			; 64 MMU maps
+	bne		immu1
+	stz		MMU_OKEY	; set operating key to map #0
+	lda		#2
+	sta		MMU_FUSE	; set fuse to 2 clocks before mapping starts
+	nop
+	nop
+
+EnableMMUMapping:
+	pha
+	lda		#1
+	sta		MMU_MAPEN
+	pla
+	rts
+DisableMMUMapping:
+	stz		MMU_MAPEN
+	rts
+
+;------------------------------------------------------------------------------
+; The ROM contents are summed up to ensure the ROM is okay.
+;------------------------------------------------------------------------------
+ROMChecksum:
+	lda		#0
+	ldx		#ROMStart>>2
+idc1:
+	add		(x)
+	inx
+	cpx		#$100000000>>2
+	bne		idc1
+	cmp		#0			; The sum of all the words in the
+						; ROM should be zero.
+	rts
+
+msgChecksum:
+	db	CR,LF,"ROM checksum: ",0
 
 ;----------------------------------------------------------
 ; Initialize programmable interrupt controller (PIC)
@@ -680,7 +826,7 @@ DumpTaskList:
 	php
 	sei
 dtl2:
-	lda		HeadRdy0,y
+	lda		QNdx0,y
 	ld		r4,r1
 	bmi		dtl1
 dtl3:
@@ -715,7 +861,8 @@ dtl3:
 	jsr		DisplayWord
 	jsr		CRLF
 	ld		r4,TCB_NxtRdy,r4
-	bpl		dtl3
+	cmp		r4,QNdx0,y
+	bne		dtl3
 dtl1:
 	iny
 	cpy		#5
@@ -729,6 +876,57 @@ dtl1:
 
 msgTaskList:
 	db	CR,LF,"Pri Task Stat Prv Nxt Timeout",CR,LF,0
+
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+message "DumpTimeoutList"
+DumpTimeoutList:
+	pha
+	phx
+	phy
+	push	r4
+	lda		#msgTimeoutList
+	jsr		DisplayStringB
+	php
+	sei
+dtol2:
+	lda		TimeoutList
+	ld		r4,r1
+	bmi		dtol1
+dtol3:
+	ld		r1,r4
+	ldx		#3
+	jsr		PRTNUM
+	lda		#' '
+	jsr		DisplayChar
+	jsr		DisplayChar
+	jsr		DisplayChar
+	ld		r1,r4
+	ldx		#3
+	lda		TCB_PrvRdy,r4
+	jsr		PRTNUM
+	lda		#' '
+	jsr		DisplayChar
+	ldx		#3
+	lda		TCB_NxtRdy,r4
+	jsr		PRTNUM
+	lda		#' '
+	jsr		DisplayChar
+	lda		TCB_Timeout,r4
+	jsr		DisplayWord
+	jsr		CRLF
+	ld		r4,TCB_NxtRdy,r4
+	bpl		dtol3
+dtol1:
+	plp
+	pop		r4
+	ply
+	plx
+	pla
+	rts
+
+msgTimeoutList:
+	db	CR,LF,"Task Prv Nxt Timeout",CR,LF,0
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
@@ -773,8 +971,8 @@ msgIOFocusList:
 	db	CR,LF,"Task Prv Nxt",CR,LF,0
 
 RunningTCBErr:
-	lda		#$FF
-	sta		LEDS
+;	lda		#$FF
+;	sta		LEDS
 	lda		#msgRunningTCB
 	jsr		DisplayStringB
 rtcberr1:
@@ -787,19 +985,41 @@ msgRunningTCB:
 	db	CR,LF,"RunningTCB is bad.",CR,LF,0
 
 ;------------------------------------------------------------------------------
+; IdleTask
+;
 ; IdleTask is a low priority task that is always running. It runs when there
 ; is nothing else to run.
+; This task check for tasks that are stuck in infinite loops and kills them.
 ;------------------------------------------------------------------------------
 IdleTask:
-	inc		TEXTSCR+167		; increment IDLE active flag
+	stz		TestTask
+it2:
+	inc		TEXTSCR+111		; increment IDLE active flag
+	ldx		TestTask
+	and		r2,r2,#$FF
+	beq		it1
+	lda		TCB_Status,x
+	cmp		#TS_SLEEP
+	bne		it1
+	txa
+	jsr		KillTask
+it1:
+	inc		TestTask
 	cli						; enable interrupts
 	wai						; wait for one to happen
-	bra		IdleTask
+	bra		it2
 
 ;------------------------------------------------------------------------------
-; r1 = task priority
-; r2 = start flags
-; r3 = start address
+; StartTask
+;
+; Startup a task. The task is automatically allocated a 1kW stack from the BIOS
+; stacks area. The scheduler is invoked after the task is added to the ready
+; list.
+;
+; Parameters:
+;	r1 = task priority
+;	r2 = start flags
+;	r3 = start address
 ;------------------------------------------------------------------------------
 message "StartTask"
 StartTask:
@@ -811,9 +1031,8 @@ StartTask:
 	push	r6
 	push	r7
 	push	r8
-	tsr		sp,r4				; save off current stack pointer
 	ld		r6,r1				; r6 = task priority
-	ld		r8,r2
+	ld		r8,r2				; r8 = flag register value on startup
 	
 	; get a free TCB
 	;
@@ -825,14 +1044,30 @@ StartTask:
 	lda		TCB_NxtTCB,x
 	sta		FreeTCB				; update the FreeTCB list pointer
 	plp
-	txa
+	txa							; acc = TCB index (task number)
 	
 	; setup the stack for the task
+	; Zap the stack memory.
 	ld		r7,r2
 	asl		r2,r2,#10			; 1kW stack per task
-	add		r2,r2,#BIOS_STACKS+0x3ff	; add in stack base
+	add		r2,r2,#BIOS_STACKS	;+0x3ff	; add in stack base
+	pha
+	phx
+	phy
+	txy							; y = target address
+	ldx		#ExitTask			; x = fill value
+	lda		#$3FF				; acc = # words to fill -1
+	stos
+	ply
+	plx
+	pla
+	
+	add		r2,r2,#$3FF			; Move pointer to top of stack
+	php
+	tsr		sp,r4				; save off current stack pointer
+	sei
 	txs
-	ldx		#$FF
+	ldx		#$1FF
 	stx		TCB_SP8Save,r7
 	st		r6,TCB_Priority,r7
 	stz		TCB_Status,r7
@@ -840,6 +1075,8 @@ StartTask:
 	; setup virtual video for the task
 	stz		TCB_CursorRow,r7
 	stz		TCB_CursorCol,r7
+	stz		TCB_mmu_map,r7		; use mmu map #0
+	stz		TCB_ABS8Save,r7
 
 	; setup the initial stack image for the task
 	; Cause a return to the ExitTask routine when the task does a 
@@ -862,6 +1099,8 @@ StartTask:
 
 	; Insert the task into the ready list
 	jsr		AddTaskToReadyList
+	plp
+	int		#2		; invoke the scheduler
 stask2:
 	pop		r8
 	pop		r7
@@ -882,9 +1121,12 @@ msgNoTCBs:
 	db		"No more task control blocks available.",CR,LF,0
 
 ;------------------------------------------------------------------------------
+; ExitTask
+;
 ; This routine is called when the task exits with an rts instruction. OR
 ; it may be invoked with a JMP ExitTask. In either case the task must be
-; running so it can't be on the timeout list.
+; running so it can't be on the timeout list. The scheduler is invoked
+; after the task is removed from the ready list.
 ;------------------------------------------------------------------------------
 message "ExitTask"
 ExitTask:
@@ -892,147 +1134,178 @@ ExitTask:
 	; release any aquired resources
 	; - mailboxes
 	; - messages
+	hoff
 	lda		RunningTCB
-	bmi		RunningTCBErr
+	cmp		#MAX_TASKNO
+	bhi		xtsk1
 	jsr		RemoveTaskFromReadyList
+	jsr		RemoveFromTimeoutList
 	stz		TCB_Status,r1				; set task status to TS_NONE
 	jsr		ReleaseIOFocus
+	ldx		#86
+	stx		LEDS
 	ldx		FreeTCB						; add the task control block to the free list
 	stx		TCB_NxtTCB,r1
 	sta		FreeTCB
+xtsk1:
 	jmp		SelectTaskToRun
 
 ;------------------------------------------------------------------------------
+; r1 = task number
+; r2 = new priority
+;------------------------------------------------------------------------------
+SetTaskPriority:
+	cmp		#MAX_TASKNO					; make sure task number is reasonable
+	bhi		stp1
+	cpx		#5							; make sure priority is okay
+	bhs		stp1
+	phy
+	php
+	sei
+	ldy		TCB_Status,r1				; if the task is on the ready list
+	bit		r3,#TS_READY|TS_RUNNING		; then remove it and re-add it.
+	beq		stp2						; Otherwise just go set the priority field
+	jsr		RemoveTaskFromReadyList
+	stx		TCB_Priority,r1
+	jsr		AddTaskToReadyList
+	plp
+	ply
+stp1:
+	rts
+stp2:
+	stx		TCB_Priority,r1
+	plp
+	ply
+	rts
+
+;------------------------------------------------------------------------------
 ; AddTaskToReadyList
-; This subroutine is called from the timer ISR so it must be relatively
-; fast.
+;
+; The ready list is a group of five ready lists, one for each priority
+; level. Each ready list is organized as a doubly linked list to allow fast
+; insertions and removals. The list is organized as a ring (or bubble) with
+; the last entry pointing back to the first. This allows a fast task switch
+; to the next task. Which task is at the head of the list is maintained
+; in the variable QNdx for the priority level.
+;
+; Registers Affected: none
 ; Parameters:
 ;	r1 = task number
 ; Returns:
 ;	none
 ;------------------------------------------------------------------------------
+;
 message "AddTaskToReadyList"
 AddTaskToReadyList:
 	php
-	pha
 	phx
 	phy
 	sei
-	ldy		TCB_Priority,r1
-	ldx		TCB_Status,r1	; set the task status to ready
-	or		r2,r2,#TS_READY
+	ldx		#TS_READY
 	stx		TCB_Status,r1
-	ldx 	TailRdy0,y		; insert the task at the list tail
-	bmi		arl1			; if no tail, then either the list is screwed up, or no tasks are on it.
-	sta		TCB_NxtRdy,x	; add as next ready on tail
-arl4:
-	stx		TCB_PrvRdy,r1	; the old tail is the previous task on the list now.
-	sta		TailRdy0,y		; update with new tail
-	ldx		#-1
-	stx		TCB_NxtRdy,r1	; There is no next ready task to the tail.
-	ldx		HeadRdy0,y		; check if the head of the ready list needs to be updated
-	bpl		arl3
-	sta		HeadRdy0,y		; Update the head of the ready list.
-	ldx		#-1				; There is no previous task at the head.
-	stx		TCB_PrvRdy,r1	
+	ldy		TCB_Priority,r1
+	ldx		QNdx0,y
+	bmi		arl5
+	ldy		TCB_PrvRdy,x
+	sta		TCB_NxtRdy,y
+	sty		TCB_PrvRdy,r1
+	sta		TCB_PrvRdy,x
+	stx		TCB_NxtRdy,r1
 arl3:	
 	ply
 	plx
-	pla
 	plp
 	rts
-	; Here the tail of the ready list needed to be updated. Flag no prior task.
-arl1:
-	ldx		#-1
-	bra		arl4
 
+	; Here the ready list was empty, so add at head
+arl5:
+	sta		QNdx0,y
+	sta		TCB_NxtRdy,r1
+	sta		TCB_PrvRdy,r1
+	ply
+	plx
+	plp
+	rts
+	
 ;------------------------------------------------------------------------------
 ; RemoveTaskFromReadyList
-; This subroutine removes a task from the ready list.
-; This can be called from within an ISR.
 ;
-; r1 = task number
+; This subroutine removes a task from the ready list.
+;
+; Registers Affected: none
+; Parameters:
+;	r1 = task number
+; Returns:
+;   r1 = task number
 ;------------------------------------------------------------------------------
+
 message "RemoveTaskFromReadyList"
 RemoveTaskFromReadyList:
 	php						; save off interrupt mask state
-	pha
 	phx
 	phy
 	push	r4
 	push	r5
 
 	sei
+	ldy		TCB_Status,r1	; is the task on the ready list ?
+	bit		r3,#TS_READY|TS_RUNNING
+	beq		rfr2
+	stz		TCB_Status,r1		; task status = TS_NONE
 	ld		r4,TCB_NxtRdy,r1	; Get previous and next fields.
-	ld		r5,TCB_PrvRdy,r1	; if there is no previous task, then this is
-	bmi		rfr1			; the head of the list. Update.
+	ld		r5,TCB_PrvRdy,r1
 	st		r4,TCB_NxtRdy,r5
-	cmp		r4,#0			; is there a next task to update ?
-	bmi		rfr4
 	st		r5,TCB_PrvRdy,r4
-	bra		rfr4
-
-	; Update the head of the list
-rfr1:
 	ldy		TCB_Priority,r1
-	st		r4,HeadRdy0,y
-	cmp		r4,#0			; did we empty the list ?
-	bmi		rfr3
-	ld		r5,#-1			; flag no previous task for head of list
-	st		r5,TCB_PrvRdy,r4
-rfr4:
-	stz		TCB_NxtRdy,r1	; Task is removed from ready list so the
-	stz		TCB_PrvRdy,r1	; contents of these fields shouldn't matter.
-							; They are set to zero (the BIOS task) in case
-							; there is a list problem.
-
-	ldx		TCB_Status,r1	; set the task status to no longer ready.
-	and		r2,r2,#~TS_READY
-	stx		TCB_Status,r1
+	cmp		r1,QNdx0,y			; Are we removing the QNdx task ?
+	bne		rfr2
+	st		r4,QNdx0,y
+	; Now we test for the case where the task being removed was the only one
+	; on the ready list of that priority level. We can tell because the
+	; NxtRdy would point to the task itself.
+	cmp		r4,r1				
+	bne		rfr2
+	ldx		#-1					; Make QNdx negative
+	stx		QNdx0,y
+	stx		TCB_NxtRdy,r1
+	stx		TCB_PrvRdy,r1
 rfr2:
 	pop		r5
 	pop		r4
 	ply
 	plx
-	pla
 	plp
-rfr9:
 	rts
-rfr3:
-	st		r4,TailRdy0,y	;
-	bra		rfr4
 
 ;------------------------------------------------------------------------------
 ; AddToTimeoutList
 ; AddToTimeoutList adds a task to the timeout list. The task is placed in the
 ; list depending on it's timeout value.
 ;
+; Registers Affected: none
 ; Parameters:
 ;	r1 = task
 ;	r2 = timeout value
 ;------------------------------------------------------------------------------
 message "AddToTimeoutList"
 AddToTimeoutList:
-	cmp		#0						; quickly validate the task number
-	bmi		RunningTCBErr			; must be between 0 and 255
-	cmp		#MAX_TASKNO
-	bpl		RunningTCBErr
-
+	php
 	phx
 	push	r4
 	push	r5
-	php
 	sei
 
 	ld		r5,#-1
 	ld		r4,TimeoutList	; are there any tasks on the timeout list ?
-	bmi		attl1
+	cmp		r4,#MAX_TASKNO
+	bhi		attl1
 attl_check_next:
 	sub		r2,r2,TCB_Timeout,r4	; is this timeout > next
 	bmi		attl_insert_before
 	ld		r5,r4
 	ld		r4,TCB_NxtRdy,r4
-	bpl		attl_check_next
+	cmp		r4,#MAX_TASKNO
+	bls		attl_check_next
 
 	; Here we scanned until the end of the timeout list and didn't find a 
 	; timeout of a greater value. So we add the task to the end of the list.
@@ -1044,8 +1317,8 @@ attl_add_at_end:
 	bra		attl_exit
 
 attl_insert_before:
-	cmp		r5,#-1
-	beq		attl2
+	cmp		r5,#MAX_TASKNO
+	bhi		attl2
 	st		r4,TCB_NxtRdy,r1	; next on list goes after this task
 	st		r5,TCB_PrvRdy,r1	; set previous link
 	st		r1,TCB_NxtRdy,r5
@@ -1076,52 +1349,51 @@ attl1:
 	stx		TCB_NxtRdy,r1		; no next entries
 	stx		TCB_PrvRdy,r1		; and no prev entries
 attl_exit:
-	ldx		TCB_Status,r1		; set the task's status as timing out
-	or		r2,r2,#TS_TIMEOUT
+	ldx		#TS_TIMEOUT			; set the task's status as timing out
 	stx		TCB_Status,r1
-	plp
 	pop		r5
 	pop		r4
 	plx
-attl4:
+	plp
 	rts
-
+msgTimeout1:
+	db	CR,LF,"Adding to timeout list:",CR,LF,0
+	
 ;------------------------------------------------------------------------------
-; This subroutine is called from within the timer ISR when the task's 
-; timeout expires.
+; RemoveFromTimeoutList
 ;
-; r1 = task number
+; This subroutine is called from within the timer ISR when the task's 
+; timeout expires. It may also be called when a task is killed.
+;
+; Registers Affected: none
+; Parameters:
+;	 r1 = task number
 ;------------------------------------------------------------------------------
 message "RemoveFromTimeoutList"
 RemoveFromTimeoutList:
-	cmp		#0						; quickly validate the task number
-	bmi		RunningTCBErr			; must be between 0 and 255
-	cmp		#MAX_TASKNO
-	bpl		RunningTCBErr
-
-	pha
+	php
 	phx
 	push	r4
 	push	r5
-	php
 	sei
 
+	ld		r4,TCB_Status,r1		; Is the task even on the timeout list ?
+	bit		#TS_TIMEOUT
+	beq		rftl5
+	cmp		TimeoutList				; Are we removing the head of the list ?
+	beq		rftl2
 	ld		r4,TCB_PrvRdy,r1		; adjust the links of the next and previous
-	bmi		rftl2
+	bmi		rftl3					; no previous link - list corrupt?
 	ld		r5,TCB_NxtRdy,r1		; tasks on the list to point around the task
 	st		r5,TCB_NxtRdy,r4
-	bmi		rftl1
+	bmi		rftl3
 	st		r4,TCB_PrvRdy,r5
 	ldx		TCB_Timeout,r1			; update the timeout of the next on list
 	add		r2,r2,TCB_Timeout,r5	; with any remaining timeout in the task
 	stx		TCB_Timeout,r5			; removed from the list
-	
-	; Here there is no next item on the list
-rftl1:
 	bra		rftl3
 
-	; Here there is no previous item on the list, so update the head of
-	; the list.
+	; Update the head of the list.
 rftl2:
 	ld		r5,TCB_NxtRdy,r1
 	st		r5,TimeoutList		; store next field into list head
@@ -1135,32 +1407,73 @@ rftl2:
 	; Here there is no previous or next items in the list, so the list
 	; will be empty once this task is removed from it.
 rftl3:
-	ldx		TCB_Status,r1		; set the task status to not timing out
-	and		r2,r2,#~TS_TIMEOUT
-	stx		TCB_Status,r1
-	plp
+	stz		TCB_Status,r1		; set the task status to TS_NONE
+	ldx		#-1					; make sure the next and prev fields indicate
+	stx		TCB_NxtRdy,r1		; the task is not on a list.
+	stx		TCB_PrvRdy,r1
+rftl5:
 	pop		r5
 	pop		r4
 	plx
-	pla
-rft4:
+	plp
 	rts
 
 ;------------------------------------------------------------------------------
+; Sleep
+;
+; Put the currently running task to sleep for a specified time.
+;
+; Registers Affected: none
 ; Parameters:
 ; r1 = time duration in centi-seconds (1/100 second).
 ;------------------------------------------------------------------------------
 Sleep:
+	php
+	pha
+	phx
 	tax
 	sei
 	lda		RunningTCB
 	jsr		RemoveTaskFromReadyList
-	jsr		AddToTimeoutList
-	ldx		#SleepRet			; The scheduler will be returning to this
-	jmp		PushRegsAndRunTask	; task eventually, once the timeout expires,
-								; so fake an interrupt call
+	jsr		AddToTimeoutList	; The scheduler will be returning to this
+	int		#2					; task eventually, once the timeout expires,
 SleepRet:
-	cli
+	plx
+	pla
+	plp
+	rts
+
+;------------------------------------------------------------------------------
+; KillTask
+;
+; "Kills" a task, removing it from all system lists. If the task has the 
+; IO focus, the IO focus is switched. Task #0 is immortal and cannot be
+; killed.
+;
+; Registers Affected: none
+; Parameters:
+;	r1 = task number
+;------------------------------------------------------------------------------
+;
+KillTask:
+	php
+	phx
+	cmp		#1							; BIOS task and IDLE task are immortal
+	bls		kt1
+	cmp		#MAX_TASKNO
+	bhi		kt1
+	sei
+	jsr		ForceReleaseIOFocus
+	jsr		RemoveTaskFromReadyList
+	jsr		RemoveFromTimeoutList
+	stz		TCB_Status,r1				; set task status to TS_NONE
+	ldx		FreeTCB						; add the task control block to the free list
+	stx		TCB_NxtTCB,r1
+	sta		FreeTCB
+	int		#2							; invoke scheduler to reschedule tasks
+kt1:
+	plx
+	plp
 	rts
 
 ;------------------------------------------------------------------------------
@@ -1316,9 +1629,7 @@ dtfm5:
 	st		r4,TCB_mbq_next,r5
 	st		r4,TCB_mbq_prev,r5
 	stz		TCB_hWaitMbx,r5
-	lda		TCB_Status,r5
-	and		#~TS_WAITMSG
-	sta		TCB_Status,r5
+	stz		TCB_Status,r5		; set task status = TS_NONE
 	pop		r5
 	pop		r4
 	plp
@@ -1335,10 +1646,8 @@ dtfm1:
 ;------------------------------------------------------------------------------
 message "SendMsg"
 SendMsg:
-	cmp		#0						; check the mailbox number to make sure
-	bmi		smsg1					; that it's sensible
-	cmp		#2047
-	bpl		smsg1
+	cmp		#2047					; check the mailbox number to make sure
+	bhi		smsg1					; that it's sensible
 	push	r4
 	push	r5
 	push	r6
@@ -1382,13 +1691,14 @@ smsg6:
 	sty		(r5)
 smsg7:
 	ld		r5,TCB_Status,r6
-	and		r5,r5,#TS_TIMEOUT
+	bit		r5,#TS_TIMEOUT
 	beq		smsg8
 	ld		r1,r6
 	jsr		RemoveFromTimeoutList
 smsg8:
 	ld		r1,r6
 	jsr		AddTaskToReadyList
+	int		#2			; invoke the scheduler
 smsg5:
 	plp
 	pop		r6
@@ -1431,10 +1741,8 @@ smsg4:
 ;	r1=E_NotAlloc	for a mailbox that isn't allocated
 ;------------------------------------------------------------------------------
 WaitMsg:
-	cmp		#0						; check the mailbox number to make sure
-	bmi		wmsg1					; that it's sensible
-	cmp		#2047
-	bpl		wmsg1
+	cmp		#2047					; check the mailbox number to make sure
+	bhi		wmsg1					; that it's sensible
 	phx
 	phy
 	push	r4
@@ -1445,7 +1753,8 @@ WaitMsg:
 	php
 	sei
 	ld		r5,MBX_OWNER,r1
-	bmi		wmsg2					; error: no owner
+	cmp		r5,#MAX_TASKNO
+	bhi		wmsg2					; error: no owner
 	jsr		DequeueMsgFromMbx
 	cmp		#0
 	bpl		wmsg3
@@ -1454,10 +1763,8 @@ WaitMsg:
 	; the ready list, and optionally add it to the timeout list.
 	; Queue the task at the mailbox.
 	lda		RunningTCB				; remove the task from the ready list
-	bmi		wmsg8
 	jsr		RemoveTaskFromReadyList
-	ld		r7,TCB_Status,r1			; set task status to waiting
-	or		r7,r7,#TS_WAITMSG
+	ld		r7,#TS_WAITMSG				; set task status to waiting
 	st		r7,TCB_Status,r1
 	st		r6,TCB_hWaitMbx,r1			; set which mailbox is waited for
 	ld		r7,#-1
@@ -1477,26 +1784,7 @@ wmsg7:
 	ld		r2,r4
 	jsr		AddToTimeoutList
 wmsg10:
-	ld		r2,#wmsg8					; save the return address
-PushRegsAndRunTask:
-	phx
-	php									; save status register
-	pha									; and save the register set
-	phx
-	phy
-	push	r4
-	push	r5
-	push	r6
-	push	r7
-	push	r8
-	push	r9
-	push	r10
-	push	r11
-	push	r12
-	push	r13
-	push	r14
-	push	r15
-	jmp		SelectTaskToRun
+	int		#2			; invoke the scheduler
 	
 	; Here there were no prior tasks queued at the mailbox
 wmsg6:
@@ -1567,10 +1855,8 @@ wmsg2:
 ;	r1=E_NotAlloc	for a mailbox that isn't allocated
 ;------------------------------------------------------------------------------
 CheckMsg:
-	cmp		#0						; check the mailbox number to make sure
-	bmi		cmsg1					; that it's sensible
-	cmp		#2047
-	bpl		cmsg1
+	cmp		#2047					; check the mailbox number to make sure
+	bhi		cmsg1					; that it's sensible
 	phx
 	phy
 	push	r4
@@ -1634,6 +1920,7 @@ cmsg5:
 
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
+comment ~
 SetIOFocusBit:
 	and		r2,r2,#$FF
 	and		r1,r2,#$1F		; get bit index 0 to 31
@@ -1644,7 +1931,7 @@ SetIOFocusBit:
 	or		r1,r1,r3
 	sta		IOFocusTbl,x
 	rts
-
+~
 ;------------------------------------------------------------------------------
 ; The I/O focus list is an array indicating which tasks are requesting the
 ; I/O focus. The I/O focus is user controlled by pressing ALT-TAB on the
@@ -1658,6 +1945,8 @@ RequestIOFocus:
 	php
 	sei
 	ldx		RunningTCB	
+	cpx		#MAX_TASKNO
+	bhi		riof1
 	ldy		IOFocusNdx		; Is the focus list empty ?
 	bmi		riof2
 riof4:
@@ -1670,7 +1959,10 @@ riof4:
 	sty		TCB_iof_prev,x
 	stx		TCB_iof_next,y
 riof3:
-	jsr		SetIOFocusBit
+	txa
+	bms		IOFocusTbl
+;	jsr		SetIOFocusBit
+riof1:
 	plp
 	ply
 	plx
@@ -1688,17 +1980,37 @@ riof2:
 ;------------------------------------------------------------------------------
 ; Releasing the I/O focus causes the focus to switch if the running task
 ; had the I/O focus.
+; ForceReleaseIOFocus forces the release of the IO focus for a task
+; different than the one currently running.
 ;------------------------------------------------------------------------------
-message "ReleaseIOFocus"	
-ReleaseIOFocus:
+;
+message "ForceReleaseIOFocus"
+ForceReleaseIOFocus:
+	php
 	pha
 	phx
 	phy
+	sei
+	tax
+	jmp		rliof4
+message "ReleaseIOFocus"	
+ReleaseIOFocus:
 	php
+	pha
+	phx
+	phy
 	sei
 	ldx		RunningTCB	
-	phx	
+rliof4:
+	cpx		#MAX_TASKNO
+	bhi		rliof3
+;	phx	
 	ldy		#1
+	txa
+	bmt		IOFocusTbl
+	beq		rliof3
+	bmc		IOFocusTbl
+comment ~
 	and		r1,r2,#$1F		; get bit index 0 to 31
 	asl		r3,r3,r1		; shift bit to proper place
 	eor		r3,r3,#-1		; invert bit mask
@@ -1706,7 +2018,8 @@ ReleaseIOFocus:
 	lda		IOFocusTbl,x
 	and		r1,r1,r3
 	sta		IOFocusTbl,x
-	plx
+~
+;	plx
 	cpx		IOFocusNdx		; Does the running task have the I/O focus ?
 	bne		rliof1
 	jsr		SwitchIOFocus	; If so, then switch the focus.
@@ -1727,10 +2040,10 @@ rliof2:
 	sta		TCB_iof_next,x	; the task is no longer on the list.
 	sta		TCB_iof_prev,x
 rliof3:
-	plp
 	ply
 	plx
 	pla
+	plp
 	rts
 
 ;------------------------------------------------------------------------------
@@ -1861,27 +2174,23 @@ ClearScreen:
 	pha							; holds a space character
 	phx							; loop counter
 	phy							; memory addressing
-	push	r4					; holds the screen color
-	push	r5
 	lda		TEXTREG+TEXT_COLS	; calc number to clear
 	ldx		TEXTREG+TEXT_ROWS
-	mul		r2,r1,r2			; r2 = # chars to clear
+	mul		r1,r1,r2			; r1 = # chars to clear
+	pha
 	jsr		GetScreenLocation
-	tay
-	jsr		GetColorCodeLocation
-	ld		r5,r1
+	tay							; y = target address
 	lda		#' '				; space char
-	ld		r4,ScreenColor
 	jsr		AsciiToScreen
-csj4:
-	sta		(y)
-	iny
-	st		r4,(r5)
-	inc		r5
-	dex
-	bne		csj4
-	pop		r5
-	pop		r4
+	tax							; x is value to store
+	pla							; a is count
+	pha
+	stos						; clear the memory
+	ld		r2,ScreenColor		; x = value to use
+	jsr		GetColorCodeLocation
+	tay							; y = targte address
+	pla							; a = count
+	stos
 	ply
 	plx
 	pla
@@ -2096,7 +2405,7 @@ dccr:
 	bne		dcx6
 	pha
 	lda		TCB_CursorCol,r4
-	cmp		#83
+	cmp		#55
 	bcs		dcx7
 	ina
 	sta		TCB_CursorCol,r4
@@ -2346,16 +2655,22 @@ KeybdInit:
 	lda		#32
 	sta		LEDS
 	ldx		#0
-kbdi1:
-	stz		KeybdHead,x		; setup keyboard buffer
-	stz		KeybdTail,x
-	lda		#1			; turn on keyboard echo
-	sta		KeybdEcho,x
-	stz		KeybdBad,x
-	inx
-	cpx		#MAX_TASKNO+1
-	bne		kbdi1
 
+	lda		#MAX_TASKNO
+	ldx		#0
+	ldy		#KeybdHead
+	stos
+	lda		#MAX_TASKNO
+	ldy		#KeybdTail
+	stos
+	lda		#MAX_TASKNO
+	ldy		#KeybdBad
+	stos
+	lda		#MAX_TASKNO
+	ldx		#1				; turn on keyboard echo
+	ldy		#KeybdEcho
+	stos
+	
 	lda		PIC_IE
 	or		r1,r1,#$8000		; enable kbd_irq
 	sta		PIC_IE
@@ -2466,9 +2781,15 @@ WaitForKeybdAck2a:
 	rts
 
 ;------------------------------------------------------------------------------
+; KeybdIRQ
+;
 ; Normal keyboard interrupt, the lowest priority interrupt in the system.
 ; Grab the character from the keyboard device and store it in a buffer.
 ; The buffer of the task with the input focus is updated.
+; This IRQ has to check for the ALT-tab character and take care of
+; switching the IO focus if detected. It can't be done in the KeybdGetChar
+; because the app with the IO focus may not call that routine. We know for
+; sure the interrupt routine will be called when a key is pressed.
 ;------------------------------------------------------------------------------
 ;
 message "KeybdIRQ"
@@ -2494,6 +2815,17 @@ KeybdIRQ:
 	ldx		KEYBD				; get keyboard character
 	ld		r0,KEYBD+1			; clear keyboard strobe (turns off the IRQ)
 	txy							; check for a keyboard ACK code
+
+	bit		r3,#$800				; test bit #11
+	bne		KeybdIRQc				; ignore keyup messages for now
+	bit		r3,#$200			; check for ALT-tab
+	beq		KeybdIrq3
+	and		r3,r3,#$FF
+	cmp		r3,#TAB					; if we find an ALT-tab
+	bne		KeybdIrq3
+	jsr		SwitchIOFocus
+	bra		KeybdIRQc				; don't store off the ALT-tab character
+KeybdIrq3:
 	and		r3,r3,#$ff
 	cmp		r3,#$FA
 	bne		KeybdIrq1
@@ -2536,6 +2868,7 @@ SetKeyboardEcho:
 	plx
 	rts
 
+comment ~
 ;------------------------------------------------------------------------------
 ; Get a bit from the I/O focus table.
 ;------------------------------------------------------------------------------
@@ -2550,6 +2883,28 @@ GetIOFocusBit:
 	and		r1,r3,#1
 	ply
 	plx
+	rts
+~
+;------------------------------------------------------------------------------
+; ForceIOFocus
+;
+; Force the IO focus to a specific task.
+;------------------------------------------------------------------------------
+;
+ForceIOFocus:
+	php
+	pha
+	phy
+	ldy		IOFocusNdx
+	cmp		r1,r3
+	beq		fif1
+	jsr		CopyScreenToVirtualScreen
+	sta		IOFocusNdx
+	jsr		CopyVirtualScreenToScreen
+fif1:
+	ply
+	pla
+	plp
 	rts
 	
 ;------------------------------------------------------------------------------
@@ -2595,14 +2950,13 @@ siof3:
 ;------------------------------------------------------------------------------
 message "KeybdGetChar"
 KeybdGetChar:
+	php
 	phx
 	push	r4
-	php
 	sei
 	ld		r4,RunningTCB
-	bmi		RunningTCBErr
-	cmp		#MAX_TASKNO
-	bpl		RunningTCBErr
+	cmp		r4,#MAX_TASKNO
+	bhi		nochar
 	ldx		KeybdTail,r4	; if keybdTail==keybdHead then there are no 
 	lda		KeybdHead,r4	; characters in the keyboard buffer
 	cmp		r1,r2
@@ -2612,19 +2966,6 @@ KeybdGetChar:
 	add		r2,r2,r4
 	lda		KeybdBuffer,x
 	plx
-	bit		#$200					; check for ALT-tab
-	beq		kgc4
-	and		#$FF
-	cmp		#TAB					; if we find an ALT-tab
-	bne		kgc4
-	jsr		SwitchIOFocus
-	; Now eat up the ALT-TAB character
-	; Flush the keyboard buffer
-	lsr		r4,r4,#4
-	stz		KeybdTail,r4
-	stz		KeybdHead,r4
-	bra		nochar
-kgc4:
 	and		r1,r1,#$ff		; mask off control bits
 	inx						; increment index
 	and		r2,r2,#$0f
@@ -2642,9 +2983,9 @@ kgc8:
 nochar:
 	lda		#-1
 kgc3:
-	plp
 	pop		r4
 	plx
+	plp
 	rts
 
 ;------------------------------------------------------------------------------
@@ -2704,14 +3045,14 @@ kgc1:
 	ld		r0,KEYBD+1		; clear keyboard strobe
 	bit		#$800			; is it a keydown event ?
 	bne		kgc1
-	bit		#$200				; check for ALT-tab
-	bne		kgc2
-	and		r2,r1,#$7f
-	cmp		r2,#TAB					; if we find an ALT-tab
-	bne		kgc2
-	jsr		SwitchIOFocus
-	bra		kgc1
-kgc2:
+;	bit		#$200				; check for ALT-tab
+;	bne		kgc2
+;	and		r2,r1,#$7f
+;	cmp		r2,#TAB					; if we find an ALT-tab
+;	bne		kgc2
+;	jsr		SwitchIOFocus
+;	bra		kgc1
+;kgc2:
 	and		#$ff			; remove strobe bit
 	ldx		KeybdEcho		; is keyboard echo on ?
 	beq		gk1
@@ -3155,9 +3496,8 @@ Prompt1:
 	lda		#80
 	sta		LEDS
 	ldx		RunningTCB
-	bmi		RunningTCBErr
 	cpx		#MAX_TASKNO
-	bpl		RunningTCBErr
+	bhi		Prompt3
 	lda		#81
 	sta		LEDS
 	stz		TCB_CursorCol,x	; go back to the start of the line
@@ -3165,16 +3505,12 @@ Prompt1:
 	tay
 	lda		#82
 	sta		LEDS
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'$'
 	bne		Prompt2			; skip over '$' prompt character
 	lda		#83
 	sta		LEDS
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 
 ; Dispatch based on command character
 ;
@@ -3183,9 +3519,7 @@ Prompt2:
 	beq		EditMem
 	cmp		#'D'
 	bne		Prompt8
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'R'
 	beq		DumpReg
 	cmp		#'I'
@@ -3195,14 +3529,14 @@ Prompt2:
 Prompt8:
 	cmp		#'F'
 	bne		Prompt7
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'L'
 	bne		Prompt8a
 	jsr		DumpIOFocusList
 	jmp		Monitor
 Prompt8a:
+	cmp		#'I'
+	beq		DoFig
 	cmp		#'M'
 	beq		DoFmt
 	dey
@@ -3221,7 +3555,7 @@ Prompt4:
 	bne		Prompt5
 	lda		#3				; priority level 3
 	ldy		#$C000			; start address $C000
-	ldx		#$20000000		; flags: emmulation mode set
+	ldx		#$00000000		; flags: 
 	jsr		StartTask
 	bra		Monitor
 	emm
@@ -3249,8 +3583,8 @@ Prompt10:
 	lda		#4				; priority level 4
 	ldx		#0				; zero all flags at startup
 	ldy		#RandomLines	; task address
-	jsr		(y)
-;	jsr		StartTask
+;	jsr		(y)
+	jsr		StartTask
 	jmp		Monitor
 ;	jmp		RandomLinesCall
 Prompt12:
@@ -3262,17 +3596,34 @@ Prompt13:
 	ldy		#Piano
 	jsr		StartTask
 	jmp		Monitor
+
 Prompt14:
 	cmp		#'T'
 	bne		Prompt15
+	jsr		MonGetch
+	cmp		#'O'
+	bne		Prompt14a
+	jsr		DumpTimeoutList
+	jmp		Monitor
+Prompt14a:
+	cmp		#'I'
+	bne		Prompt14b
+	jsr		DisplayDatetime
+	jmp		Monitor
+Prompt14b:
+	cmp		#'E'
+	bne		Prompt14c
+	jsr		ReadTemp
+	jmp		Monitor
+Prompt14c:
+	dey
 	jsr		DumpTaskList
 	jmp		Monitor
+
 Prompt15:
 	cmp		#'S'
 	bne		Prompt16
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'P'
 	bne		Prompt18
 	jsr		ignBlanks
@@ -3295,22 +3646,43 @@ Prompt18:
 Prompt16:
 	cmp		#'e'
 	bne		Prompt17
-	jsr		eth_main
+	lda		#1
+	ldx		#0
+	ldy		#eth_main
+	jsr		StartTask
+;	jsr		eth_main
+	jmp		Monitor
 Prompt17:
 	cmp		#'R'
-	bne		Monitor
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	bne		Prompt19
+	jsr		MonGetch
 	cmp		#'S'
 	beq		LoadSector
 	dey
 	bra		SetRegValue
 	jmp		Monitor
+Prompt19:
+	cmp		#'K'
+	bne		Monitor
+Prompt19a:
+	jsr		MonGetch
+	cmp		#' '
+	bne		Prompt19a
+	jsr		ignBlanks
+	jsr		GetDecNumber
+	jsr		KillTask
+	jmp		Monitor
+
 message "Prompt16"
 RandomLinesCall:
 ;	jsr		RandomLines
 	jmp		Monitor
+
+MonGetch:
+	lda		(y)
+	iny
+	jsr		ScreenToAscii
+	rts
 
 DoDir:
 	jsr		do_dir
@@ -3318,16 +3690,18 @@ DoDir:
 DoFmt:
 	jsr		do_fmt
 	jmp		Monitor
-
+DoFig:
+	lda		#3				; priority level 3
+	ldy		#$A000			; start address $A000
+	ldx		#$20000000		; flags: emmulation mode set
+	jsr		StartTask
+	bra		Monitor
+	
 TestCLS:
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'L'
 	bne		Monitor
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#'S'
 	bne		Monitor
 	jsr 	ClearScreen
@@ -3348,6 +3722,8 @@ HelpMsg:
 	db	"D = Dump memory",CR,LF
 	db	"F = Fill memory",CR,LF
 	db  "FL = Dump I/O Focus List",CR,LF
+;	db  "FIG = start FIG Forth",CR,LF
+	db	"KILL n = kill task #n",CR,LF
 	db	"B = start tiny basic",CR,LF
 	db	"b = start EhBasic 6502",CR,LF
 	db	"J = Jump to code",CR,LF
@@ -3355,6 +3731,9 @@ HelpMsg:
 	db	"r = random lines - test bitmap",CR,LF
 	db	"e = ethernet test",CR,LF
 	db	"T = Dump task list",CR,LF
+	db	"TO = Dump timeout list",CR,LF
+	db	"TI = display date/time",CR,LF
+	db	"TEMP = display temperature",CR,LF
 	db	"P = Piano",CR,LF,0
 
 ;------------------------------------------------------------------------------
@@ -3365,9 +3744,7 @@ HelpMsg:
 ;
 ignBlanks:
 ignBlanks1:
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	cmp		#' '
 	beq		ignBlanks1
 	dey
@@ -3575,9 +3952,7 @@ GetHexNumber:
 	ldx		#0
 	ld		r4,#8
 gthxn2:
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	jsr		AsciiToHexNybble
 	cmp		#-1
 	beq		gthxn1
@@ -3600,9 +3975,7 @@ GetDecNumber:
 	ld		r4,#10
 	ld		r5,#10
 gtdcn2:
-	lda		(y)
-	iny
-	jsr		ScreenToAscii
+	jsr		MonGetch
 	jsr		AsciiToDecNybble
 	cmp		#-1
 	beq		gtdcn1
@@ -3667,14 +4040,15 @@ ClearBmpScreen:
 	pha
 	phx
 	phy
-	ldx		#(1364*768)>>2		; x = # words to clear
-	lda		#0x29292929			; acc = color for four pixels
+	lda		#(1364*768)>>2		; a = # words to clear
+	ldx		#0x29292929			; acc = color for four pixels
 	ldy		#BITMAPSCR			; y = screen address
-cbsj4
-	sta		(y)					; store pixel data
-	iny							; advance screen address
-	dex							; decrement pixel count and loop back
-	bne		cbsj4
+	stos
+;cbsj4
+;	sta		(y)					; store pixel data
+;	iny							; advance screen address
+;	dex							; decrement pixel count and loop back
+;	bne		cbsj4
 	ply
 	plx
 	pla
@@ -3700,7 +4074,7 @@ sac971:						; wait for status to register 0xF (all ready)
 	ld		r3,Milliseconds
 	sub		r3,r3,r4
 	cmp		r3,#1000
-	bpl		sac97Abort
+	bhi		sac97Abort
 	jsr		KeybdGetChar	; see if we needed to CTRL-C
 	cmp		#CTRLC
 	beq		sac973
@@ -3722,7 +4096,7 @@ sac972:
 	ld		r3,Milliseconds
 	sub		r3,r3,r4
 	cmp		r3,#1000
-	bpl		sac97Abort
+	bhi		sac97Abort
 	jsr		KeybdGetChar
 	cmp		#CTRLC
 	beq		sac975
@@ -3751,9 +4125,8 @@ msgAC97bad:
 ;--------------------------------------------------------------------------
 ;
 Beep:
-	pha
 	lda		#15				; master volume to max
-	sta		PSG+128
+	sta		PSG+64
 	lda		#13422			; 800Hz
 	sta		PSGFREQ0
 	; decay  (16.384 ms)2
@@ -3770,9 +4143,10 @@ Beep:
 	sta		PSGCTRL0
 	lda		#100			; delay about 1s
 	jsr		Sleep
+	lda		#83
+	sta		LEDS
 	lda		#0x0000			; gate off, output enable off, no waveform
 	sta		PSGCTRL0
-	pla
 	rts
 
 ;--------------------------------------------------------------------------
@@ -3781,7 +4155,7 @@ Beep:
 Piano:
 	jsr		RequestIOFocus
 	lda		#15				; master volume to max
-	sta		PSG+128
+	sta		PSG+64
 playnt:
 	jsr		KeybdGetChar
 	cmp		#CTRLC
@@ -4470,6 +4844,119 @@ my_MAC4	EQU	0xF0
 my_MAC5	EQU	0xDA
 my_MAC6	EQU	0x42
 
+; r1 = PHY
+; r2 = regnum
+; r3 = data
+;
+eth_mii_write:
+	pha
+	phx
+	push	r4
+	ld		r4,#ETHMAC
+	asl		r2,r2,#8
+	or		r1,r1,r2
+	sta		ETH_MIIADDRESS,r4
+	sty		ETH_MIITX_DATA,r4
+	lda		#ETH_WCTRLDATA
+	sta		ETH_MIICOMMAND,r4
+	stz		ETH_MIICOMMAND,r4
+emiw1:
+	lda		ETH_MIISTATUS,r4
+	bit		#ETH_MIISTATUS_BUSY
+	bne		emiw1
+	pop		r4
+	plx
+	pla
+	rts
+
+; r1 = PHY
+; r2 = reg
+
+eth_mii_read:
+	phx
+	phy
+	ldy		#ETHMAC
+	asl		r2,r2,#8
+	or		r1,r1,r2
+	sta		ETH_MIIADDRESS,y	
+	lda		#ETH_MIICOMMAND_RSTAT
+	sta		ETH_MIICOMMAND,y
+	stz		ETH_MIICOMMAND,y
+emir1:
+	lda		ETH_MIISTATUS,y
+	bit		#ETH_MIISTATUS_BUSY
+	bne		emir1	
+	lda		ETH_MIIRX_DATA,y
+	ply
+	plx
+	rts
+
+ethmac_setup:
+	ld		r4,#ETHMAC
+	lda		#ETH_MIIMODER_RST
+	sta		ETH_MIIMODER,r4
+	lda		ETH_MIIMODER,r4
+	and		#~ETH_MIIMODER_RST
+	sta		ETH_MIIMODER,r4
+	lda		#$10				; /16=1.25MHz
+	sta		ETH_MIIMODER,r4		; Clock divider for MII Management interface 
+	lda		#ETH_MODER_RST
+	sta		ETH_MODER,r4
+	lda		ETH_MODER,r4
+	and		#~ETH_MODER_RST
+	sta		ETH_MODER,r4
+
+	stz		ETH_MIITX_DATA,r4
+	stz		ETH_MIIADDRESS,r4
+	stz		ETH_MIICOMMAND,r4
+	
+	lda		#0xEEF0DA42
+	sta		ETH_MAC_ADDR0,r4		; MAC0
+	lda		#0x00FF
+	sta		ETH_MAC_ADDR1,r4		; MAC1
+
+	lda		#-1
+	sta		ETH_INT_SOURCE,r4
+
+	; Advertise support for 10/100 FD/HD
+	lda		#ETH_PHY
+	ldx		#ETH_MII_ADVERTISE
+	jsr		eth_mii_read
+	or		r3,r1,#ETH_ADVERTISE_ALL
+	lda		#ETH_PHY
+	ldx		#ETH_MII_ADVERTISE
+	jsr		eth_mii_write
+
+	; Do NOT advertise support for 1000BT
+	lda		#ETH_PHY
+	ldx		#ETH_MII_CTRL1000
+	jsr		eth_mii_read
+	and		r3,r1,#~(ETH_ADVERTISE_1000FULL|ETH_ADVERTISE_1000HALF)
+	lda		#ETH_PHY
+	ldx		#ETH_MII_CTRL1000
+	jsr		eth_mii_write
+ 
+	; Disable 1000BT
+	lda		#ETH_PHY
+	ldx		#ETH_MII_EXPANSION
+	jsr		eth_mii_read
+	and		r3,r1,#~(ETH_ESTATUS_1000_THALF|ETH_ESTATUS_1000_TFULL)
+	ldx		#ETH_MII_EXPANSION
+	jsr		eth_mii_write
+  
+	; Restart autonegotiation
+	lda		#0
+	ldx		#ETH_MII_BMCR
+	jsr		eth_mii_read
+	and		r3,r1,#~(ETH_BMCR_ANRESTART|ETH_BMCR_ANENABLE)
+	lda		#7
+	jsr		eth_mii_write
+	
+	; Enable BOTH the transmiter and receiver
+	lda		#$A003
+	sta		ETH_MODER,r4
+	rts
+  
 ; Initialize the ethmac controller.
 ; Supply a MAC address, set MD clock
 ;
@@ -4478,10 +4965,12 @@ eth_init:
 	pha
 	phy
 	ldy		#ETHMAC
-	lda		#0x64				; 100
-	sta		ETH_MIIMODER,y
-	lda		#7					; PHY address
-	sta		ETH_MIIADDRESS,y
+	lda		#$A003
+	sta		ETH_MODER,y
+;	lda		#0x64				; 100
+;	sta		ETH_MIIMODER,y
+;	lda		#7					; PHY address
+;	sta		ETH_MIIADDRESS,y
 	lda		#0xEEF0DA42
 	sta		ETH_MAC_ADDR0,y		; MAC0
 	lda		#0x00FF
@@ -4508,15 +4997,18 @@ eth_request_packet:
 eth1:
 	nop
 	ldx		ETH_INT_SOURCE,y
-	and		r2,r2,#4			; get bit #2
+	bit		r2,#4				; get bit #2
 	beq		eth1
 	ldx		0x180,y				; get from descriptor
 	lsr		r2,r2,#16
 	ldy		#0
-	ld		r4,#TEXTSCR+3780	; second last line of screen
+	pha
+	jsr		GetScreenLocation
+	add		r4,r1,3780			; second last line of screen
+	pla
 eth20:
 	add		r5,r1,r3
-	ldx		(r5)				; get byte
+	lb		r2,0,r5				; get byte
 	add		r5,r4,r3
 	stx		(r5)				; store to screen
 	iny
@@ -4584,7 +5076,7 @@ eth_send_packet:
 	; wait for tx buffer to be clear
 eth8:
 	ld		r4,0x100,y
-	and		r4,r4,#$8000
+	bit		r4,#$8000
 	bne		eth8
 	ld		r4,#1			; clear tx interrupt
 	st		r4,ETH_INT_SOURCE,y
@@ -4770,15 +5262,27 @@ eth11:
 	eor		r1,r1,r1
 	bra		eth13
 
+msgEthTest
+	db		CR,LF,"Ethernet test - press CTRL-C to exit.",CR,LF,0
+
 message "eth_main"
 eth_main:
-	jsr		eth_init
+	jsr		RequestIOFocus
+	jsr		ClearScreen
+	jsr		HomeCursor
+	lda		#msgEthTest
+	jsr		DisplayStringB
+;	jsr		eth_init
+	jsr		ethmac_setup
 eth_loop:
 	jsr		KeybdGetChar
 	cmp		#-1
 	beq		eth17
 	cmp		#CTRLC
 	bne		eth17
+	lda		#$A000					; tunr off transmit/recieve
+	sta		ETH_MODER+ETHMAC
+	jsr		ReleaseIOFocus
 	rts
 eth17
 	lda		#eth_rx_buffer<<2		; memory address zero
@@ -4954,6 +5458,7 @@ eth10:
 ;--------------------------------------------------------------------------
 ; Initialize sprite image caches with random data.
 ;--------------------------------------------------------------------------
+message "RandomizeSprram"
 RandomizeSprram:
 	ldx		#SPRRAM
 	ld		r4,#14336		; number of chars to initialize
@@ -4969,6 +5474,7 @@ rsr1:
 ; Draw random lines on the bitmap screen.
 ;--------------------------------------------------------------------------
 ;
+message "RandomLines"
 RandomLines:
 	pha
 	phx
@@ -4976,28 +5482,34 @@ RandomLines:
 	push	r4
 	push	r5
 	jsr		RequestIOFocus
+	jsr		ClearScreen
+	jsr		HomeCursor
+	lda		#msgRandomLines
+	jsr		DisplayStringB
 rl5:
 	tsr		LFSR,r1
 	tsr		LFSR,r2
+	tsr		LFSR,r3
+	mod		r1,r1,#1364
+	mod		r2,r2,#768
 	jsr		DrawPixel
 	tsr		LFSR,r1
 	sta		LineColor		; select a random color
 rl1:						; random X0
 	tsr		LFSR,r1
-	ld		r5,#1364
-	mod		r1,r1,r5
+	mod		r1,r1,#1364
 rl2:						; random X1
 	tsr		LFSR,r3
-	mod		r3,r3,r5
+	mod		r3,r3,#1364
 rl3:						; random Y0
 	tsr		LFSR,r2
-	ld		r5,#768
-	mod		r2,r2,r5
+	mod		r2,r2,#768
 rl4:						; random Y1
 	tsr		LFSR,r4
-	ld		r5,#768
-	mod		r4,r4,r5
+	mod		r4,r4,#768
 rl8:
+	ld		r5,GA_STATE		; make sure state is IDLE
+	bne		rl8
 	jsr		DrawLine
 	jsr		KeybdGetChar
 	cmp		#CTRLC
@@ -5012,27 +5524,40 @@ rl7:
 	pla
 	rts
 
+msgRandomLines:
+	db		CR,LF,"Random lines running - press CTRL-C to exit.",CR,LF,0
+
 ;--------------------------------------------------------------------------
 ; Draw a pixel on the bitmap screen.
 ; r1 = x coordinate
 ; r2 = y coordinate
 ; r3 = color
 ;--------------------------------------------------------------------------
+message "DrawPixel"
 DrawPixel:
+	pha
+	sta		GA_X0
+	stx		GA_Y0
+	sty		GA_PEN
+	lda		#1
+	sta		GA_CMD
+	pla
+	rts
+
+comment ~	
 	pha
 	phx
 	push	r4
-	ld		r4,#768
-	mod		r2,r2,r4
-	ld		r4,#1364
-	mod		r1,r1,r4
-	mul		r2,r2,r4	; y * 1364
+	mod		r2,r2,#768
+	mod		r1,r1,#1364
+	mul		r2,r2,#1364	; y * 1364
 	add		r1,r1,r2	; + x
 	sb		r3,BITMAPSCR<<2,r1
 	pop		r4
 	plx
 	pla
 	rts
+~
 
 ;--------------------------------------------------------------------------
 ; Draw a line on the bitmap screen.
@@ -5056,7 +5581,21 @@ DrawPixel:
 ;270 GOTO 150
 ;300 RETURN
 
+message "DrawLine"
 DrawLine:
+	pha
+	sta		GA_X0
+	stx		GA_Y0
+	sty		GA_X1
+	st		r4,GA_Y1
+	lda		LineColor
+	sta		GA_PEN
+	lda		#2
+	sta		GA_CMD
+	pla
+	rts
+
+comment ~
 	pha
 	phx
 	phy
@@ -5134,9 +5673,191 @@ dln300:
 	plx
 	pla
 	rts
+~
 
 ;include "float.asm"
 
+;--------------------------------------------------------------------------
+; RTF65002 code to display the date and time from the date/time device.
+;--------------------------------------------------------------------------
+DisplayDatetime
+	pha
+	phx
+	lda		#' '
+	jsr		DisplayChar
+	stz		DATETIME_SNAPSHOT	; take a snapshot of the running date/time
+	lda		DATETIME_DATE
+	tax
+	lsr		r1,r1,#16
+	jsr		DisplayHalf		; display the year
+	lda		#'/'
+	jsr		DisplayChar
+	txa
+	lsr		r1,r1,#8
+	and		#$FF
+	jsr		DisplayByte		; display the month
+	lda		#'/'
+	jsr		DisplayChar
+	txa
+	and		#$FF
+	jsr		DisplayByte		; display the day
+	lda		#' '
+	jsr		DisplayChar
+	lda		#' '
+	jsr		DisplayChar
+	lda		DATETIME_TIME
+	tax
+	lsr		r1,r1,#24
+	jsr		DisplayByte		; display hours
+	lda		#':'
+	jsr		DisplayChar
+	txa
+	lsr		r1,r1,#16
+	jsr		DisplayByte		; display minutes
+	lda		#':'
+	jsr		DisplayChar
+	txa
+	lsr		r1,r1,#8
+	jsr		DisplayByte		; display seconds
+	lda		#'.'
+	jsr		DisplayChar
+	txa
+	jsr		DisplayByte		; display 100ths seconds
+	jsr		CRLF
+	plx
+	pla
+	rts
+
+;--------------------------------------------------------------------------
+; ReadTemp
+;    Read and display the temperature from a DS1626 temperature sensor
+; device. RTF65002 source code.
+;--------------------------------------------------------------------------
+DS1626_CMD	=$FFDC0300
+DS1626_DAT	=$FFDC0301
+; Commands
+START_CNV = $51;
+STOP_CNV = $22;
+READ_TEMP = $AA;
+READ_CONFIG = $AC;
+READ_TH = $A1;
+READ_TL = $A2;
+WRITE_TH = $01;
+WRITE_TL = $02;
+WRITE_CONFIG = $0C;
+POR = $54;
+
+ReadTemp:
+	lda		CONFIGREC	; Do we even have a temperature sensor ?
+	bit		#$10
+	beq		rdtmp3		; If not, output '0.000'
+rdtmp1:
+	; On power up the DS1626 interface circuit sends a power on reset (POR)
+	; command to the DS1626. Waiting here makes sure this command has been
+	; completed.
+	jsr		rdt_busy_wait
+	lda		#$0F			; 12 bits resolution, cpu mode, one-shot mode
+	sta		DS1626_DAT
+	lda		#WRITE_CONFIG	; write the desired config to the device
+	sta		DS1626_CMD
+	jsr		rdt_busy_wait
+	lda		#10
+	jsr		tSleep
+	lda		#0
+	sta		DS1626_DAT
+	lda		#START_CNV		; issue a start conversion command
+	sta		DS1626_CMD
+	jsr		rdt_busy_wait
+	lda		#10
+	jsr		tSleep
+	; Now poll the config register to determine when the conversion has completed.
+rdtmp2:
+	lda		#READ_CONFIG	; issue the READ_CONFIG command
+	sta		DS1626_CMD
+	jsr		rdt_busy_wait
+	pha
+	lda		#10				; Wait a bit before checking again. The conversion
+	jsr		tSleep			; can take up to 1s to complete.
+	pla
+	bit		#$80			; test done bit
+	beq		rdtmp2			; loop back if not done conversion
+	lda		#0
+	sta		DS1626_DAT		; issue a stop conversion command
+	lda		#STOP_CNV
+	sta		DS1626_CMD
+	jsr		rdt_busy_wait
+	lda		#10
+	jsr		tSleep
+	lda		#READ_TEMP		; issue the READ_TEMP command
+	sta		DS1626_CMD
+	jsr		rdt_busy_wait
+	pha
+	lda		#10
+	jsr		tSleep
+	pla
+rdtmp4:
+	jsr		CRLF
+	and		#$FFF
+	bit		#$800		; check for negative temperature
+	beq		rdtmp7
+	sub		r1,r0,r1	; negate the number
+	and		#$FFF
+	pha
+	lda		#'-'		; output a minus sign
+	jsr		DisplayChar
+	pla
+rdtmp7:
+	pha					; save off value
+	lsr		r1,r1,#4	; get rid of fractional portion
+	and		#$7F		; strip off sign bit
+	ldx		#3			; output the whole number part
+	jsr		PRTNUM
+	lda		#'.'		; followed by a decimal point
+	jsr		DisplayChar
+	pla					; get back temp value
+	and		#$0F
+	mul		r1,r1,#625	; 1/16th's per degree
+	pha					; save off fraction bits
+	div		r1,r1,#100	; calculate the first digit
+	add		#'0'
+	jsr		DisplayChar	; output digit
+	pla					; get back fractions bits
+	pha					; and save again
+	div		r1,r1,#10	; shift over to second digit
+	mod		r1,r1,#10	; ignore high order bits
+	add		#'0'
+	jsr		DisplayChar	; display the digit
+	pla					; get back fraction
+	mod		r1,r1,#10	; compute low order digit
+	add		#'0'
+	jsr		DisplayChar	; display low order digit
+	jsr		CRLF
+	rts
+rdtmp3:
+	lda		#0
+	bra		rdtmp4
+
+; Returns:
+;	acc = value from data register
+;
+rdt_busy_wait:
+	jsr		KeybdGetChar
+	cmp		#CTRLC
+	beq		Monitor
+	lda		DS1626_DAT
+	bit		#$8000
+	bne		rdt_busy_wait
+	rts
+
+tSleep:
+	ldx		Milliseconds
+	txa
+tSleep1:
+	ldx		Milliseconds
+	sub		r2,r2,r1
+	cpx		#100
+	blo		tSleep1
+	rts
 
 ;==============================================================================
 ; Memory Management routines follow.
@@ -5284,11 +6005,17 @@ memf2:
 message "bus_err_rout"
 bus_err_rout:
 	cld
+	ldx		#87
+	stx		LEDS
 	pla							; get rid of the stacked flags
 	ply							; get the error PC
 	ldx		#$05FFFFF8			; setup stack pointer top of memory
 	txs
+	ldx		#88
+	stx		LEDS
 	jsr		CRLF
+	stz		RunningTCB
+	stz		IOFocusNdx
 	lda		#msgBusErr
 	jsr		DisplayStringB
 	tya
@@ -5297,25 +6024,61 @@ bus_err_rout:
 	jsr		DisplayStringB
 	tsr		#9,r1
 	jsr		DisplayWord
-	cli							; enable interrupts so we can get a char
+	ldx		#89
+	stx		LEDS
+	ldx		#128
+ber2:
+	lda		#' '
+	jsr		DisplayChar
+	tsr		hist,r1
+	jsr		DisplayWord
+	dex
+	bne		ber2
+	jsr		CRLF
+ber3:
+	nop
+	jmp		ber3
+	;cli							; enable interrupts so we can get a char
 ber1:
-	jsr		KeybdGetChar
+	jsr		KeybdGetCharDirect	; Don't use the keyboard buffer
 	cmp		#-1
 	beq		ber1
-	jmp		ber1
+	lda		RunningTCB
+	jsr		KillTask
+	jmp		SelectTaskToRun
 	
 msgBusErr:
 	db		"Bus error at: ",0
 msgDataAddr:
 	db		" data address: ",0
 
+
+;------------------------------------------------------------------------------
+; Reschedule tasks to run without affecting the timeout list timing.
+;------------------------------------------------------------------------------
+;
+reschedule:
+	cld		; clear extended precision mode
+
+	pusha	; save off regs on the stack
+
+	ldx		RunningTCB
+	tsa						; save off the stack pointer
+	sta		TCB_SPSave,x
+	tsr		sp8,r1			; and the eight bit mode stack pointer
+	sta		TCB_SP8Save,x
+	tsr		abs8,r1
+	sta		TCB_ABS8Save,x	; 8 bit emulation base register
+	jmp		SelectTaskToRun
+	
 strStartQue:
-	db		1,0,0,0,2,0,0,0,3,1,0,0,4,0,0,0
+	db		1,0,0,0,2,0,0,0,3,0,1,0,4,0,0,0
 ;	db		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ;------------------------------------------------------------------------------
 ; 100 Hz interrupt
 ; - takes care of "flashing" the cursor
+; - decrements timeouts for tasks on timeout list
 ; - switching tasks
 ;------------------------------------------------------------------------------
 ;
@@ -5324,34 +6087,20 @@ p100Hz:
 	pha
 	lda		#3				; reset the edge sense circuit
 	sta		PIC_RSTE
-;	inc		TEXTSCR+83		; update IRQ live indicator on screen
 	lda		IRQFlag
 	ina
 	sta		IRQFlag
 	ror
-	bcc		p100Hz11	
 	pla
+	bcc		p100Hz11	
 	rti
 
 p100Hz11:
 
 	cld		; clear extended precision mode
 
-	; save off regs on the stack
-	phx
-	phy
-	push	r4
-	push	r5
-	push	r6
-	push	r7
-	push	r8
-	push	r9
-	push	r10
-	push	r11
-	push	r12
-	push	r13
-	push	r14
-	push	r15
+	pusha	; save off regs on the stack
+
 	ldx		RunningTCB
 	tsa						; save off the stack pointer
 	sta		TCB_SPSave,x
@@ -5359,9 +6108,7 @@ p100Hz11:
 	sta		TCB_SP8Save,x
 	tsr		abs8,r1
 	sta		TCB_ABS8Save,x	; 8 bit emulation base register
-	lda		TCB_Status,x	; set the task status to PREEMPT
-	and		r1,r1,#~TS_RUNNING
-	or		r1,r1,#TS_PREEMPT
+	lda		#TS_READY
 	sta		TCB_Status,x
 p100Hz4:
 
@@ -5375,10 +6122,10 @@ p100Hz4:
 	and		#$E0
 	sb		r1,IrqBase
 
-	inc		TEXTSCR+83		; update IRQ live indicator on screen
+	inc		TEXTSCR+55		; update IRQ live indicator on screen
 	
 	; flash the cursor
-	cpx		IOFocusNdx		; only flash the cursor for the task with the IO focus.
+	cpx		IOFocusNdx		; only bother to flash the cursor for the task with the IO focus.
 	bne		p100Hz1a
 	lda		CursorFlash		; test if we want a flashing cursor
 	beq		p100Hz1a
@@ -5405,80 +6152,72 @@ p100Hz15:
 	jsr		RemoveFromTimeoutList
 	jsr		AddTaskToReadyList
 	bra		p100Hz15				; go back and see if there's another task to be removed
-
+									; there could be a string of tasks to make ready.
 p100Hz14:
 	dea								; decrement the entry's timeout
 	sta		TCB_Timeout,x
 	
 p100Hz12:
-SelectTaskToRun:
-	; Search the ready queues for a ready task.
-	; The search is occasionally started at a lower priority queue in order
-	; to prevent starvation of lower priority tasks. This is managed by 
-	; using a tick count as an index to a string containing the start que.
+	; Falls through into selecting a task to run
 
+;------------------------------------------------------------------------------
+; Search the ready queues for a ready task.
+; The search is occasionally started at a lower priority queue in order
+; to prevent starvation of lower priority tasks. This is managed by 
+; using a tick count as an index to a string containing the start que.
+;------------------------------------------------------------------------------
+;
+SelectTaskToRun:
 	ld		r6,#5			; number of queues to search
 	ldy		IRQFlag			; use the IRQFlag as a buffer index
 	lsr		r3,r3,#1		; the LSB is always the same
 	and		r3,r3,#$0F		; counts from 0 to 15
 	lb		r3,strStartQue,y	; get the queue to start search at
-p100Hz2:
-	lda		HeadRdy0,y
-	bmi		p100Hz1
-	; Move the head of the ready queue to the tail
-	jsr		RemoveTaskFromReadyList	; remove task
-	jsr		AddTaskToReadyList		; add it back (automatically goes to tail spot)
-	ldx		TCB_Status,r1		; the task is no longer running
-	and		r2,r2,#~TS_RUNNING
-	stx		TCB_Status,r1
-	lda		HeadRdy0,y
+sttr2:
+	lda		QNdx0,y
+	bmi		sttr1
+	lda		TCB_NxtRdy,r1		; Advance the queue index
+	sta		QNdx0,y
+	; This is the only place the RunningTCB is set (except for initialization).
 	sta		RunningTCB
-	ldx		TCB_Status,r1		; flag the task as the running task
-	or		r2,r2,#TS_RUNNING	; task is now running and not preempt
-	and		r2,r2,#~TS_PREEMPT
+	ldx		#TS_RUNNING			; flag the task as the running task
 	stx		TCB_Status,r1
-	bra		p100Hz3
-p100Hz1:
-	iny
-	cpy		#5
-	bne		p100Hz5
-	ldy		#0
-p100Hz5
-	dec		r6
-	bne		p100Hz2
-
-	; here there were no tasks ready
-	; this might happen if the interrupt is called before tasks
-	; are setup. Otherwise the IDLE task should at least be running.
-	bra		p100Hz6
-p100Hz3:
-p100Hz10
-	ldx		RunningTCB
+	; The mmu map better have the task control block area mapped
+	; properly.
+	tax
+	lda		CONFIGREC
+	bit		#4096
+	beq		sttr4
+	lda		TCB_mmu_map,x
+	sta		MMU_OKEY			; select the mmu map for the task
+	lda		#2
+	sta		MMU_FUSE			; set fuse to 2 clocks before mapping starts
+sttr4:
 	lda		TCB_ABS8Save,x		; 8 bit emulation base register
-	trs		r1,abs8
+	trs		r0,abs8
 	lda		TCB_SP8Save,x		; get back eight bit stack pointer
 	trs		r1,sp8
 	ldx		TCB_SPSave,x		; get back stack pointer
 	txs
-	; restore registers
-p100Hz6:
-	pop		r15
-	pop		r14
-	pop		r13
-	pop		r12
-	pop		r11
-	pop		r10
-	pop		r9
-	pop		r8
-	pop		r7
-	pop		r6
-	pop		r5
-	pop		r4
-	ply
-	plx
-	pla
+	popa						; restore registers
 	rti
 
+	; Set index to check the next ready list for a task to run
+sttr1:
+	iny
+	cpy		#5
+	bne		sttr5
+	ldy		#0
+sttr5
+	dec		r6
+	bne		sttr2
+
+	; Here there were no tasks ready
+	; This should not be able to happen, so hang the machine.
+sttr3:
+	ldx		#94
+	stx		LEDS
+	bra		sttr3
 
 ;------------------------------------------------------------------------------
 ; 1000 Hz interrupt
@@ -5491,7 +6230,6 @@ p1000Hz:
 	lda		#2						; reset edge sense circuit
 	sta		PIC_RSTE
 	inc		Milliseconds			; increment milliseconds count
-	inc		TEXTSCR+82				; update IRQ live indicator on screen
 	pla
 	rti
 
@@ -5502,31 +6240,19 @@ p1000Hz:
 ;------------------------------------------------------------------------------
 slp_rout:
 	cld		; clear extended precision mode
-	pha
-	phx
-	phy
-	push	r4
-	push	r5
-	push	r6
-	push	r7
-	push	r8
-	push	r9
-	push	r10
-	push	r11
-	push	r12
-	push	r13
-	push	r14
-	push	r15
-	ldx		RunningTCB
-	bmi		RunningTCBErr
-	and		r2,r2,#$FF
+	pusha
+	lda		RunningTCB
+	cmp		#MAX_TASKNO
+	bhi		slp1
+	jsr		RemoveTaskFromReadyList
+	tax
 	tsa						; save off the stack pointer
 	sta		TCB_SPSave,x
 	tsr		sp8,r1			; and the eight bit mode stack pointer
 	sta		TCB_SP8Save,x
-	lda		TCB_Status,x	; set the task status to SLEEP
-	and		r1,r1,#~TS_RUNNING
-	or		r1,r1,#TS_SLEEP
+	tsr		abs8,r1
+	sta		TCB_ABS8Save,x
+	lda		#TS_SLEEP		; set the task status to SLEEP
 	sta		TCB_Status,x
 slp1:
 	jmp		SelectTaskToRun
@@ -5557,7 +6283,7 @@ InvalidOpIRQ:
 	sta		4,x		; save incremented return address back to stack
 	ldx		#64
 ioi1:
-	tsr		abs8,r1
+	tsr		hist,r1
 	jsr		DisplayWord
 	lda		#' '
 	jsr		DisplayChar
