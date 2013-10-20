@@ -20,61 +20,61 @@
 //                                                                          
 // ============================================================================
 //
-module rtf65002_itagmem(wclk, wr, adr, rclk, pc, hit0, hit1);
-input wclk;
-input wr;
+task wb_burst;
+input [5:0] len;
 input [33:0] adr;
-input rclk;
-input [31:0] pc;
-output hit0;
-output hit1;
+begin
+	bte_o <= 2'b00;
+	cti_o <= 3'b001;
+	bl_o <= len;
+	cyc_o <= 1'b1;
+	stb_o <= 1'b1;
+	sel_o <= 4'hF;
+	adr_o <= adr;
+end
+endtask
 
-wire [31:0] pcp8 = pc + 32'd8;
-wire [31:0] tag0;
-wire [31:0] tag1;
-reg [31:0] rpc;
-reg [31:0] rpcp8;
+task wb_read;
+input [33:0] adr;
+begin
+	cyc_o <= 1'b1;
+	stb_o <= 1'b1;
+	sel_o <= 4'hF;
+	adr_o <= adr;
+end
+endtask
 
-always @(posedge rclk)
-	rpc <= pc;
-always @(posedge rclk)
-	rpcp8 <= pcp8;
+task wb_write;
+input byt;
+input [31:0] dat;
+begin
+	cyc_o <= 1'b1;
+	stb_o <= 1'b1;
+	we_o <= 1'b1;
+	if (byt) begin
+		case(wadr2LSB)
+		2'd0:	sel_o <= 4'b0001;
+		2'd1:	sel_o <= 4'b0010;
+		2'd2:	sel_o <= 4'b0100;
+		2'd3:	sel_o <= 4'b1000;
+		endcase
+	end
+	else
+		sel_o <= 4'hf;
+	adr_o <= {wadr,2'b00};
+	dat_o <= dat;
+end
+endtask	
 
-syncRam1kx32_1rw1r ram0 (
-	.wrst(1'b0),
-	.wclk(wclk),
-	.wce(1'b1),
-	.we(wr),
-	.wsel(4'hF),
-	.wadr(adr[13:4]),
-	.i(adr[31:0]),
-	.wo(),
-
-	.rrst(1'b0),
-	.rclk(rclk),
-	.rce(1'b1),
-	.radr(pc[13:4]),
-	.o(tag0)
-);
-
-syncRam1kx32_1rw1r ram1 (
-	.wrst(1'b0),
-	.wclk(wclk),
-	.wce(1'b1),
-	.we(wr),
-	.wsel(4'hF),
-	.wadr(adr[13:4]),
-	.i(adr[31:0]),
-	.wo(),
-
-	.rrst(1'b0),
-	.rclk(rclk),
-	.rce(1'b1),
-	.radr(pcp8[13:4]),
-	.o(tag1)
-);
-
-assign hit0 = tag0[31:14]==rpc[31:14] && tag0[0];
-assign hit1 = tag1[31:14]==rpcp8[31:14] && tag1[0];
-
-endmodule
+task wb_nack;
+begin
+	cti_o <= 3'b000;
+	bl_o <= 6'd0;
+	cyc_o <= 1'b0;
+	stb_o <= 1'b0;
+	sel_o <= 4'h0;
+	we_o <= 1'b0;
+	adr_o <= 34'd0;
+	dat_o <= 32'd0;
+end
+endtask
