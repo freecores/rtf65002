@@ -57,13 +57,6 @@ LOAD_MAC2:
 `endif
 LOAD_MAC3:
 	begin
-		regfile[Rt] <= res[31:0];
-		case(Rt)
-		4'h1:	acc <= res[31:0];
-		4'h2:	x <= res[31:0];
-		4'h3:	y <= res[31:0];
-		default:	;
-		endcase
 		// Rt will be zero by the time the IFETCH stage is entered because of
 		// the decrement below.
 		if (Rt==4'd1)
@@ -88,6 +81,10 @@ IY3:
 		if (ir9==`ST_IY) begin
 			store_what <= `STW_A;
 			state <= STORE1;
+		end
+		else if (ir9==`LEA_IY) begin
+			res <= radr + y;
+			next_state(IFETCH);
 		end
 		else begin
 			load_what <= `WORD_310;

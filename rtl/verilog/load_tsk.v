@@ -33,6 +33,8 @@ begin
 				end
 	`WORD_311:	// For pla/plx/ply/pop/ldx/ldy
 				begin
+					if (ir9==`POP)
+						Rt <= ir[15:12];
 					res <= dat;
 					state <= isPopa ? LOAD_MAC3 : IFETCH;
 				end
@@ -177,6 +179,10 @@ begin
 					state <= IY3;
 				else if (ir9==`ST_IX)
 					state <= STORE1;
+				else if (ir9==`LEA_IX) begin
+					res <= dat;
+					next_state(IFETCH);
+				end
 				else begin
 					load_what <= `WORD_310;
 					state <= LOAD_MAC1;

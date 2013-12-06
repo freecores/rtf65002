@@ -57,6 +57,8 @@ STORE1:
 `ifdef SUPPORT_DCACHE
 		radr <= wadr;		// Do a cache read to test the hit
 `endif
+		if (ir9==`PUSH)
+			Rt <= 4'h0;
 		state <= STORE2;
 	end
 	

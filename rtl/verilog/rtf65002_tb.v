@@ -18,6 +18,14 @@ wire ack;
 wire [7:0] udo;
 wire btrm_ack;
 wire [31:0] btrm_dato;
+wire bas_ack;
+wire [31:0] bas_dato;
+wire tc_ack;
+wire [31:0] tc_dato;
+wire sema_ack;
+wire [31:0] sema_dat;
+wire ga_ack;
+wire [31:0] ga_dat;
 
 initial begin
 	clk = 1;
@@ -25,7 +33,7 @@ initial begin
 	nmi = 0;
 	#100 rst = 1;
 	#100 rst = 0;
-	#500 nmi = 1;
+	#500 nmi = 0;
 	#10 nmi = 0;
 end
 
@@ -50,18 +58,33 @@ rtf65002d cpu0 (
 	.dat_o(dato)
 );
 
-wire uartcs = cyc && stb && a[33:8]==26'h00000CF;
-wire romcs = ~(cyc && stb && a[33:28]==6'h0F);
-wire ramcs = ~(cyc && stb && (a[33:15]==19'h00 || (a[33:28]!=6'hF && a[33:28]!=6'h0)));
-wire romcs1 = ~(cyc && stb && a[33:13]==21'h07);	// E000
+wire uartcs = cyc && stb && a[33:8]==26'h00000BF;
+wire romcs = ~(cyc && stb && a[33:20]==14'h0FFF);
+wire ramcs = ~(cyc && stb && (a[33:14]==20'h00 || (a[33:28]!=6'h3F && a[33:28]!=6'h0 && a[33:28]!=6'h0F)));
+wire romcs1 = 1'b1;//~(cyc && stb && a[33:13]==21'h07);	// E000
+wire bas_cs = (cyc && stb && a[33:14]==20'h03);
+wire tc_cs = (cyc && stb && (a[33:18]==16'hFFD0 || a[33:18]==16'hFFDA ||a[33:18]==16'hFFD1 || a[33:18]==16'hFFD2));
+wire leds_cs = (cyc && stb && a[33:2]==32'hFFDC0600);
+wire configrec_cs = (cyc && stb && a[33:6]==28'hFFDCFFF);
 
 assign d = wr ? dato : 32'bz;
 assign dati = ~romcs ? btrm_dato : 32'bz;
 assign dati = ~ramcs ? d : 32'bz;
 assign dati = uartcs ? {4{udo}} : 32'bz;
 assign dati = ~romcs1 ? d : 32'bz;
+assign dati = bas_cs ? bas_dato : 32'bz;
+assign dati = tc_cs ? tc_dato : 32'bz;
+assign dati = configrec_cs ? 32'h00000FDF : 32'bz;
+assign dati = sema_ack ? sema_dat : 32'bz;
+assign dati = ga_ack ? ga_dat : 32'bz;
 
 assign ack =
+	configrec_cs |
+	leds_cs |
+	tc_ack |
+	sema_ack |
+	ga_ack |
+	bas_ack |
 	btrm_ack |
 	~ramcs |
 	~romcs1 |
@@ -73,6 +96,63 @@ rom2Kx32 #(.MEMFILE("t65c.mem")) rom1(.ce(romcs1), .oe(wr), .addr(a[12:2]), .d(d
 ram8Kx32 ram0 (.clk(clk), .ce(ramcs), .oe(wr), .we(~wr), .sel(sel), .addr(a[14:2]), .d(d));
 uart uart0(.clk(clk), .cs(uartcs), .wr(wr), .a(a[2:0]), .di(dato[7:0]), .do(udo));
 bootrom ubr1 (.rst_i(rst), .clk_i(clk), .cti_i(cti), .cyc_i(cyc), .stb_i(stb), .ack_o(btrm_ack), .adr_i(a), .dat_o(btrm_dato), .perr());
+basic_rom ubas1(.rst_i(rst), .clk_i(clk), .cti_i(cti), .cyc_i(cyc), .stb_i(stb), .ack_o(bas_ack), .adr_i(a), .dat_o(bas_dato), .perr());
+rtfTextController tc1 (
+	.rst_i(rst),
+	.clk_i(clk),
+	.cyc_i(cyc),
+	.stb_i(stb),
+	.ack_o(tc_ack),
+	.we_i(wr),
+	.adr_i(a),
+	.dat_i(dato),
+	.dat_o(tc_dato),
+	.lp(),
+	.curpos(),
+	.vclk(1'b0),
+	.hsync(1'b0),
+	.vsync(1'b0),
+	.blank(1'b0),
+	.border(1'b0),
+	.rgbIn(),
+	.rgbOut()
+);
+
+sema_mem usm1
+(
+	.rst_i(rst),
+	.clk_i(clk),
+	.cyc_i(cyc),
+	.stb_i(stb),
+	.ack_o(sema_ack),
+	.we_i(wr),
+	.adr_i(a),
+	.dat_i(dato),
+	.dat_o(sema_dat)
+);
+
+rtfGraphicsAccelerator uga1 (
+.rst_i(rst),
+.clk_i(clk),
+
+.s_cyc_i(cyc),
+.s_stb_i(stb),
+.s_we_i(wr),
+.s_ack_o(ga_ack),
+.s_sel_i(sel),
+.s_adr_i(a),
+.s_dat_i(dato),
+.s_dat_o(ga_dat),
+
+.m_cyc_o(),
+.m_stb_o(),
+.m_we_o(),
+.m_ack_i(1'b1),
+.m_sel_o(),
+.m_adr_o(),
+.m_dat_i(),
+.m_dat_o()
+);
 
 always @(posedge clk) begin
 	if (rst)
@@ -81,10 +161,10 @@ always @(posedge clk) begin
 		n = n + 1;
 	if ((n & 7)==0)
 		$display("t   n  cti cyc we   addr din adnx do re vma wr ird sync vma nmi irq  PC  IR A  X  Y  SP nvmdizcb\n");
-	$display("%d %d %b  %b  %b  %h %h %h %h %h %h %h %h %h %h %h %h %b%b%b%b%b%b%b%b %d %b %b %b %b %b %b",
-		$time, n, cpu0.cti_o, cpu0.cyc_o, cpu0.we_o, cpu0.adr_o, cpu0.dat_i, cpu0.dat_o, cpu0.res, cpu0.res8, cpu0.pc, cpu0.ir,
+	$display("%d %d %b  %b%b  %c  %h %h %h %h %h pc=%h ir=%h acc=%h x=%h y=%h sp=%h sp8=%h %b%b%b%b%b%b%b%b %s %b %b %b %b %b %b",
+		$time, n, cpu0.cti_o, cpu0.cyc_o, cpu0.ack_i, cpu0.we_o?"W":" ", cpu0.adr_o, cpu0.dat_i, cpu0.dat_o, cpu0.res, cpu0.res8, cpu0.pc, cpu0.ir,
 		cpu0.acc, cpu0.x, cpu0.y, cpu0.isp, cpu0.sp, 
-		cpu0.nf, cpu0.vf, cpu0.df, cpu0.im, cpu0.zf, cpu0.cf, cpu0.bf, cpu0.em, cpu0.state, cpu0.imiss, cpu0.ihit,cpu0.hit0,cpu0.hit1,cpu0.imiss,ubr1.cs);
+		cpu0.nf, cpu0.vf, cpu0.df, cpu0.im, cpu0.zf, cpu0.cf, cpu0.bf, cpu0.em, cpu0.fnStateName(cpu0.state), cpu0.imiss, cpu0.ihit,cpu0.hit0,cpu0.hit1,cpu0.imiss,ubr1.cs);
 end
 	
 endmodule
@@ -143,7 +223,7 @@ module ram8Kx32(clk, ce, oe, we, sel, addr, d);
 	output	[31:0]	d;		// tri-state data I/O
 	tri [31:0] d;
 
-	reg		[31:0]	mem [0:8191];
+	reg		[31:0]	mem [0:65535];
 	integer nn;
 
 	initial begin

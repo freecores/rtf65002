@@ -105,6 +105,7 @@ wire [31:0] sr = {nf,vf,em,tf,23'b0,bf,df,im,zf,cf};
 wire [7:0] sr8 = {nf,vf,1'b0,bf,df,im,zf,cf};
 reg nmi1,nmi_edge;
 reg wai;
+reg wrrf;		// write register file
 reg [31:0] acc;
 reg [31:0] x;
 reg [31:0] y;
@@ -655,8 +656,10 @@ if (rst_i) begin
 	pg2 <= `FALSE;
 	tf <= `FALSE;
 	km <= `TRUE;
+	wrrf <= 1'b0;
 end
 else begin
+wrrf <= 1'b0;
 tick <= tick + 32'd1;
 ilfsr <= {ilfsr,ilfsr_fb};
 if (nmi_i & !nmi1)
@@ -749,7 +752,20 @@ BUS_ERROR:
 `include "cache_controller.v"
 
 endcase
+
+if (wrrf || state==IFETCH || state==LOAD_MAC3) begin
+	regfile[Rt] <= res[31:0];
+	case(Rt)
+	4'h1:	acc <= res[31:0];
+	4'h2:	x <= res[31:0];
+	4'h3:	y <= res[31:0];
+	default:	;
+	endcase
 end
+
+end
+
+
 `include "decode.v"
 `include "calc.v"
 `include "load_tsk.v"
@@ -761,5 +777,45 @@ begin
 	state <= nxt;
 end
 endtask
+
+function [127:0] fnStateName;
+input [5:0] state;
+case(state)
+RESET1:	fnStateName = "RESET1     ";
+RESET2:	fnStateName = "RESET2     ";
+IFETCH:	fnStateName = "IFETCH     ";
+DECODE:	fnStateName = "DECODE     ";
+STORE1:	fnStateName = "STORE1     ";
+STORE2:	fnStateName = "STORE2     ";
+CALC:	fnStateName = "CALC       ";
+RTS1:	fnStateName = "RTS1       ";
+IY3:	fnStateName = "IY3        ";
+BYTE_IX5:	fnStateName = "BYTE_IX5   ";
+BYTE_IY5:	fnStateName = "BYTE_IY5   ";
+WAIT_DHIT:	fnStateName = "WAIT_DHIT  ";
+MULDIV1:	fnStateName = "MULDIV1    ";
+MULDIV2:	fnStateName = "MULDIV2    ";
+BYTE_DECODE:	fnStateName = "BYTE_DECODE";
+BYTE_CALC:	fnStateName = "BYTE_CALC  ";
+BUS_ERROR:	fnStateName = "BUS_ERROR  ";
+LOAD_MAC1:	fnStateName = "LOAD_MAC1  ";
+LOAD_MAC2:	fnStateName = "LOAD_MAC2  ";
+LOAD_MAC3:	fnStateName = "LOAD_MAC3  ";
+MVN3:		fnStateName = "MVN3       ";
+PUSHA1:		fnStateName = "PUSHA1     ";
+POPA1:		fnStateName = "POPA1      ";
+BYTE_IFETCH:	fnStateName = "BYTE_IFETCH";
+LOAD_DCACHE:	fnStateName = "LOAD_DCACHE";
+LOAD_ICACHE:	fnStateName = "LOAD_ICACHE";
+LOAD_IBUF1:		fnStateName = "LOAD_IBUF1 ";
+LOAD_IBUF2:		fnStateName = "LOAD_IBUF2 ";
+LOAD_IBUF3:		fnStateName = "LOAD_IBUF3 ";
+ICACHE1:		fnStateName = "ICACHE1    ";
+IBUF1:			fnStateName = "IBUF1      ";
+DCACHE1:		fnStateName = "DCACHE1    ";
+CMPS1:			fnStateName = "CMPS1      ";
+default:		fnStateName = "UNKNOWN    ";
+endcase
+endfunction
 
 endmodule

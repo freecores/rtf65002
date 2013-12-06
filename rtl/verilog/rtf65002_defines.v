@@ -448,6 +448,15 @@
 `define HOFF		9'h158
 `define CMPS		9'h144
 
+`define LEA_ZPX		9'h1D5
+`define LEA_IX		9'h1C1
+`define LEA_IY		9'h1D1
+`define LEA_ABS		9'h1CD
+`define LEA_ABSX	9'h1DD
+`define LEA_RIND	9'h1D2
+`define LEA_I		9'h1D2
+`define LEA_DSP		9'h1C3
+
 `define NOTHING		5'd0
 `define SR_70		5'd1
 `define SR_310		5'd2

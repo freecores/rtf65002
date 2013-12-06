@@ -37,7 +37,7 @@ task calc_tsk;
 		`ROR_ZPX,`ROR_ABS,`ROR_ABSX,
 		`INC_ZPX,`INC_ABS,`INC_ABSX,
 		`DEC_ZPX,`DEC_ABS,`DEC_ABSX:
-			state <= STORE1;
+				state <= STORE1;
 		endcase
 	end
 endtask
