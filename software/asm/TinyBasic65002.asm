@@ -48,32 +48,36 @@ CTRLX	EQU	0x18
 XON		EQU	0x11
 XOFF	EQU	0x13
 
-CursorFlash	EQU		0xFC4
-IRQFlag		EQU		0xFC6
+CursorFlash	EQU		0x7C4
+IRQFlag		EQU		0x7C6
 
-OSSP		EQU		0xF00
-TXTUNF		EQU		0xF01
-VARBGN		EQU		0xF02
-LOPVAR		EQU		0xF03
-STKGOS		EQU		0xF04
-CURRNT		EQU		0xF05
-BUFFER		EQU		0xF06
+OUTPTR		EQU		0x778
+INPPTR		EQU		0x779
+FILENAME	EQU		0x6C0
+FILEBUF		EQU		0x01F60000
+OSSP		EQU		0x700
+TXTUNF		EQU		0x701
+VARBGN		EQU		0x702
+LOPVAR		EQU		0x703
+STKGOS		EQU		0x704
+CURRNT		EQU		0x705
+BUFFER		EQU		0x706
 BUFLEN		EQU		84
-LOPPT		EQU		0xF60
-LOPLN		EQU		0xF61
-LOPINC		EQU		0xF62
-LOPLMT		EQU		0xF63
-NUMWKA		EQU		0xF64
-STKINP		EQU		0xF74
-STKBOT		EQU		0xF75
-usrJmp		EQU		0xF76
-IRQROUT		EQU		0xF77
+LOPPT		EQU		0x760
+LOPLN		EQU		0x761
+LOPINC		EQU		0x762
+LOPLMT		EQU		0x763
+NUMWKA		EQU		0x764
+STKINP		EQU		0x774
+STKBOT		EQU		0x775
+usrJmp		EQU		0x776
+IRQROUT		EQU		0x777
 
 
 
 		cpu	rtf65002
 		code
-		org		$FFFFEC00
+		org		$FFFFEC80
 GOSTART:	
 		jmp	CSTART	;	Cold Start entry point
 GOWARM:	
@@ -93,10 +97,10 @@ GOBYE:
 ;
 		align	4
 ;THRD_AREA	dw	0x04000000	; threading switch area 0x04000000-0x40FFFFF
-;bitmap dw	0x04100000	; bitmap graphics memory 0x04100000-0x417FFFF
-TXTBGN	dw	0x04180000	;TXT		;beginning of program memory
-ENDMEM	dw	0x057FFFFF	;	end of available memory
-STACKOFFS	dw	0x058FFFFF	; stack offset - leave a little room for the BIOS stacks
+;bitmap dw	0x00100000	; bitmap graphics memory 0x04100000-0x417FFFF
+TXTBGN	dw	0x01800000	;TXT		;beginning of program memory
+ENDMEM	dw	0x018EFFFF	;	end of available memory
+STACKOFFS	dw	0x018FFFFF	; stack offset - leave a little room for the BIOS stacks
 ;
 ; The main interpreter starts here:
 ;
@@ -504,7 +508,7 @@ RUNNXL					; RUN <next line>
 	ld 		r0,IRQFlag		; was there an IRQ ?
 	beq		RUN1
 	stz		IRQFlag
-	jsr		PUSHA		; the same code as a GOSUB
+	jsr		PUSHA_		; the same code as a GOSUB
 	push	r8
 	lda		CURRNT
 	pha					; found it, save old 'CURRNT'...
@@ -541,7 +545,7 @@ RUNSML                 ; RUN <same line>
 ;
 GOTO
 	jsr		OREXPR		;evaluate the following expression
-	jsr		DisplayWord
+;	jsr		DisplayWord
 	ld      r5,r1
 	jsr 	ENDCHK		;must find end of line
 	ld      r1,r5
@@ -723,7 +727,7 @@ FINISH:
 ;******************************************************************
 ;
 GOSUB:
-	jsr		PUSHA		; save the current 'FOR' parameters
+	jsr		PUSHA_		; save the current 'FOR' parameters
 	jsr		OREXPR		; get line number
 	jsr		FNDLN		; find the target line
 	cmp		#0
@@ -762,7 +766,7 @@ return1:
 	pla
 	sta		CURRNT		; and the old 'CURRNT'
 	pop		r8			; and the old text pointer
-	jsr		POPA		;and the old 'FOR' parameters
+	jsr		POPA_		;and the old 'FOR' parameters
 	jmp		FINISH		;and we are back home
 
 ;******************************************************************
@@ -785,7 +789,7 @@ return1:
 ;******************************************************************
 ;
 FOR:
-	jsr		PUSHA		; save the old 'FOR' save area
+	jsr		PUSHA_		; save the old 'FOR' save area
 	jsr		SETVAL		; set the control variable
 	sta		LOPVAR		; save its address
 	ld		r9,#TAB5
@@ -863,7 +867,7 @@ NX0:
 NX5:
 	cmp		r1,r9
 	beq		NX2		; else we check them OK, they agree
-	jsr		POPA		; nope, let's see the next frame
+	jsr		POPA_		; nope, let's see the next frame
 	bra		NX0
 NX2:
 	lda		(r9)		; get control variable's value
@@ -889,7 +893,7 @@ NX3:
 	ld		r8,LOPPT	; saved 'CURRNT' and text pointer.
 	jmp		FINISH
 NXPurge:
-    jsr    POPA        ; purge this loop
+    jsr    POPA_        ; purge this loop
     jmp     FINISH
 
 
@@ -1084,11 +1088,11 @@ LODEND:
 	jmp		WSTART		; back to direct mode
 
 
-; get character from input (16 bit value)
+; get character from input (32 bit value)
 GCHAR:
 	push	r5
 	push	r6
-	ld		r6,#3       ; repeat four times
+	ld		r6,#8       ; repeat eight times
 	ld		r5,#0
 GCHAR1:
 	jsr		GOAUXI		; get a char
@@ -1096,10 +1100,7 @@ GCHAR1:
 	beq		GCHAR1
 	bcc		GCHAR1
 	jsr		asciiToHex
-	asl		r5,r5
-	asl		r5,r5
-	asl		r5,r5
-	asl		r5,r5
+	asl		r5,r5,#4
 	or		r5,r5,r1
 	dec		r6
 	bne		GCHAR1
@@ -1123,19 +1124,48 @@ a2h1:
 	and		#15			; make sure a nybble
 	rts
 
-LOAD3:
-	jsr		spi_init
+GetFilename:
+	ldy		#'"'
+	ld		r4,#gfn1
+	jsr		TSTC
+	ldy		#0
+gfn2:
+	ld		r1,(r8)		; get text character
+	inc		r8
+	cmp		#'"'
+	beq		gfn3
 	cmp		#0
-	bne		WSTART
-	lda		#5000
+	beq		gfn3
+	sb		r1,FILENAME,y
+	iny
+	cpy		#32
+	bne		gfn2
+	rts
+gfn3:
+	lda		#' '
+	sb		r1,FILENAME,y
+	iny
+	cpy		#32
+	bne		gfn3
+	rts
+gfn1:
+	jmp		WSTART
+
+LOAD3:
+	jsr		GetFilename
+	jsr		AUXIN_INIT
+	jmp		LOAD
+
+;	jsr		OREXPR		;evaluate the following expression
+;	lda		#5000
 	ldx		#$E00
-	jsr		spi_read_sector
-	lda		#5001
+	jsr		SDReadSector
+	ina
 	ldx		TXTBGN>>2
 	asl		r2,r2,#2
 LOAD4:
 	pha
-	jsr		spi_read_sector
+	jsr		SDReadSector
 	add		r2,r2,#512
 	pla
 	ina
@@ -1144,21 +1174,24 @@ LOAD4:
 	add		r4,r4,#65536
 	cmp		r2,r4
 	bmi		LOAD4
+LOAD5:
 	bra		WSTART
 
 SAVE3:
-	jsr		spi_init
-	cmp		#0
-	bne		WSTART
-	lda		#5000		; starting sector
+	jsr		GetFilename
+	jsr		AUXOUT_INIT
+	jmp		SAVE
+
+	jsr		OREXPR		;evaluate the following expression
+;	lda		#5000		; starting sector
 	ldx		#$E00		; starting address to write
-	jsr		spi_write_sector
-	lda		#5001
+	jsr		SDWriteSector
+	ina
 	ldx		TXTBGN>>2
 	asl		r2,r2,#2
 SAVE4:
 	pha
-	jsr		spi_write_sector
+	jsr		SDWriteSector
 	add		r2,r2,#512
 	pla
 	ina
@@ -1194,6 +1227,7 @@ SAVEND:
 	jsr		AUXOCRLF    ; followed by a CR & LF
 	lda		#$1A		; and a control-Z to end the CP/M file
 	jsr		GOAUXO
+	jsr		AUXOUT_FLUSH
 	bra		WSTART		; then go do a warm start
 
 
@@ -1212,14 +1246,11 @@ AUXOCRLF:
 ; tricky because of the need to reverse the order of the chars
 PWORD:
 	push	r5
-	ld		r5,#NUMWKA+15
+	ld		r5,#NUMWKA+7
 	or		r4,r1,r0	; r4 = value
 pword1:
     or      r1,r4,r0    ; r1 = value
-    lsr		r4,r4		; shift over to next nybble
-    lsr		r4,r4
-    lsr		r4,r4
-    lsr		r4,r4
+    lsr		r4,r4,#4	; shift over to next nybble
     jsr		toAsciiHex  ; convert LS nybble to ascii hex
     sta     (r5)		; save in work area
     sub		r5,r5,#1
@@ -1230,7 +1261,7 @@ pword2:
     add		r5,r5,#1
     lda    (r5)     ; get char to output
 	jsr		GOAUXO		; send it
-	cmp		r5,#NUMWKA+15
+	cmp		r5,#NUMWKA+7
 	bcc		pword2
 	pop		r5
 	rts
@@ -2157,15 +2188,15 @@ MVDOWN:
 	rts
 
 
-; 'POPA' restores the 'FOR' loop variable save area from the stack
+; 'POPA_' restores the 'FOR' loop variable save area from the stack
 ;
-; 'PUSHA' stacks for 'FOR' loop variable save area onto the stack
+; 'PUSHA_' stacks for 'FOR' loop variable save area onto the stack
 ;
 ; Note: a single zero word is stored on the stack in the
 ; case that no FOR loops need to be saved. This needs to be
-; done because PUSHA / POPA is called all the time.
-message "POPA"
-POPA:
+; done because PUSHA_ / POPA_ is called all the time.
+message "POPA_"
+POPA_:
 	ply
 	pla
 	sta		LOPVAR	; restore LOPVAR, but zero means no more
@@ -2182,7 +2213,7 @@ PP1:
 	jmp		(y)
 
 
-PUSHA:
+PUSHA_:
 	ply
 	lda		STKBOT		; Are we running out of stack room?
 	add		r1,r1,#5	; we might need this many words
@@ -2317,10 +2348,10 @@ public PRTNUM:
 	sub		r1,r0,r1	; else make it positive
 	dec		r5			; one less for width count
 PN2:
-	ld		r3,#10
+;	ld		r3,#10
 PN1:
-	mod		r2,r1,r3	; r2 = r1 mod 10
-	div		r1,r1,r3	; r1 /= 10 divide by 10
+	mod		r2,r1,#10	; r2 = r1 mod 10
+	div		r1,r1,#10	; r1 /= 10 divide by 10
 	add		r2,r2,#'0'	; convert remainder to ascii
 	stx		(r7)		; and store in buffer
 	inc		r7
@@ -2431,7 +2462,7 @@ PRTLN:
     ld		r5,r1		; r5 = pointer
     lda		(r5)		; get the binary line number
     inc		r5
-    ldx		#12       ; display a 0 or more digit line no.
+    ldx		#5       ; display a 0 or more digit line no.
 	jsr		PRTNUM
 	lda		#' '     ; followed by a blank
 	jsr		GOOUT
@@ -2672,22 +2703,57 @@ INCH1:
 ;* ===== Input a character from the host into register r1 (or
 ;*	return Zero status if there's no character available).
 ;*
+AUXIN_INIT:
+	stz		INPPTR
+	lda		#FILENAME
+	ldx		#FILEBUF<<2
+	ldy		#$10000
+	jsr		do_load
+	rts
+
 AUXIN:
-	jsr		SerialGetChar
-	cmp		#-1
-	beq		AXIRET_ZERO
-	and		#$7F				;zero out the high bit
-AXIRET:
+	phx
+	ldx		INPPTR
+	lb		r1,FILEBUF<<2,x
+	inx
+	stx		INPPTR
+	plx
 	rts
-AXIRET_ZERO:
-	lda		#0
-	rts
+	
+;	jsr		SerialGetChar
+;	cmp		#-1
+;	beq		AXIRET_ZERO
+;	and		#$7F				;zero out the high bit
+;AXIRET:
+;	rts
+;AXIRET_ZERO:
+;	lda		#0
+;	rts
 
 ; ===== Output character to the host (Port 2) from register r1
 ;	(Preserves all registers.)
 ;
-AUXOUT
-	jmp		SerialPutChar	; call boot rom routine
+AUXOUT_INIT:
+	stz		OUTPTR
+	rts
+
+AUXOUT:
+	phx
+	ldx		OUTPTR
+	sb		r1,FILEBUF<<2,x
+	inx
+	stx		OUTPTR
+	plx
+	rts
+
+AUXOUT_FLUSH:
+	lda		#FILENAME
+	ldx		#FILEBUF<<2
+	ldy		OUTPTR
+	jsr		do_save
+	rts
+
+;	jmp		SerialPutChar	; call boot rom routine
 
 
 _cls
