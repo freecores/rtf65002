@@ -26,6 +26,7 @@ task decode_tsk;
 		Rt <= 4'h0;		// Default
 		state <= IFETCH;
 		pc <= pc + pc_inc;
+		pc_inc2 <= pc_inc;
 		a <= rfoa;
 		res <= alu_out;
 		ttrig <= tf;
@@ -56,9 +57,20 @@ task decode_tsk;
 		`TON:	tf <= 1'b1;
 		`TOFF:	tf <= 1'b0;
 		`HOFF:	hist_capture <= 1'b0;
-		`EMM:	begin em <= 1'b1;
+		// Switching to 65c02 mode zeros out the upper part of the index registers.
+		// Switching to 65c816 mode does not zero out the upper part of the index registers,
+		// this is unlike switching from '02 to '816 mode. Also, the register size select
+		// bits are not affected.
+		`XCE:	begin
+					em <= 1'b1;
+					m816 <= ~cf;
+					cf <= ~m816;
+					if (cf) begin
+						x[31:8] <= 24'd0;
+						y[31:8] <= 24'd0;
+					end
 `ifdef SUPPORT_EM8
-				state <= BYTE_IFETCH;
+					next_state(BYTE_IFETCH);
 `endif
 				end
 		`DEX:	Rt <= 4'd2;
@@ -157,6 +169,19 @@ task decode_tsk;
 		`ROR_RR:	Rt <= ir[15:12];
 		`DEC_RR:	Rt <= ir[15:12];
 		`INC_RR:	Rt <= ir[15:12];
+/*
+		Can't P&R this
+		`ADD_R:		begin Rt <= ir[11: 8]; b <= rfob; end
+		`SUB_R:		begin Rt <= ir[11: 8]; b <= rfob; end
+		`OR_R:		begin Rt <= ir[11: 8]; b <= rfob; end
+		`AND_R:		begin Rt <= ir[11: 8]; b <= rfob; end
+		`EOR_R:		begin Rt <= ir[11: 8]; b <= rfob; end
+*/	
+		`ADD_IMM4:	begin Rt <= ir[11: 8]; b <= {{28{ir[15]}},ir[15:12]}; end
+		`SUB_IMM4:	begin Rt <= ir[11: 8]; b <= {{28{ir[15]}},ir[15:12]}; end
+		`OR_IMM4:	begin Rt <= ir[11: 8]; b <= {{28{ir[15]}},ir[15:12]}; end
+		`AND_IMM4:	begin Rt <= ir[11: 8]; b <= {{28{ir[15]}},ir[15:12]}; end
+		`EOR_IMM4:	begin Rt <= ir[11: 8]; b <= {{28{ir[15]}},ir[15:12]}; end
 
 		`ADD_IMM8:	begin Rt <= ir[15:12]; b <= {{24{ir[23]}},ir[23:16]}; end
 		`SUB_IMM8:	begin Rt <= ir[15:12]; b <= {{24{ir[23]}},ir[23:16]}; end
@@ -292,7 +317,7 @@ task decode_tsk;
 			end
 		`ST_DSP:
 			begin
-				wadr <= {{24{ir[23]}},ir[23:16]} + isp;
+				wadr <= {24'b0,ir[23:16]} + isp;
 				store_what <= `STW_RFA;
 				state <= STORE1;
 			end
@@ -382,13 +407,13 @@ task decode_tsk;
 		`LEA_DSP:
 			begin
 				Rt <= ir[15:12];
-				res <= {{24{ir[23]}},ir[23:16]} + isp;
+				res <= {24'b0,ir[23:16]} + isp;
 				state <= IFETCH;
 			end
 		`ADD_DSP,`SUB_DSP,`OR_DSP,`AND_DSP,`EOR_DSP:
 			begin
 				Rt <= ir[15:12];
-				radr <= {{24{ir[23]}},ir[23:16]} + isp;
+				radr <= {24'b0,ir[23:16]} + isp;
 				load_what <= `WORD_310;
 				state <= LOAD_MAC1;
 			end
@@ -456,6 +481,13 @@ task decode_tsk;
 				load_what <= `WORD_310;
 				state <= LOAD_MAC1;
 			end
+		`SPL_ABS:
+			begin
+				Rt <= 4'h0;
+				radr <= ir[39:8];
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
+			end
 		`BMS_ABS,`BMC_ABS,`BMF_ABS,`BMT_ABS:
 			begin
 				radr <= ir[39:8] + acc[31:5];
@@ -491,6 +523,13 @@ task decode_tsk;
 		`BMS_ABSX,`BMC_ABSX,`BMF_ABSX,`BMT_ABSX:
 			begin
 				radr <= absx32xy_address + acc[31:5];
+				load_what <= `WORD_310;
+				state <= LOAD_MAC1;
+			end
+		`SPL_ABSX:
+			begin
+				Rt <= 4'h0;
+				radr <= absx32xy_address;
 				load_what <= `WORD_310;
 				state <= LOAD_MAC1;
 			end
@@ -536,7 +575,7 @@ task decode_tsk;
 			begin
 				pg2 <= `FALSE;
 				ir <= {8{`BRK}};
-				vect <= {vbr[31:9],ir[15:7],2'b00};
+				vect <= {vbr[31:9],ir[0],ir[15:8],2'b00};
 				state <= DECODE;
 			end
 		`JMP:
@@ -783,16 +822,18 @@ task decode_tsk;
 			begin
 				Rt <= 4'd3;
 				radr <= x;
-				res <= x + 32'd1;
+				res <= x_inc;
 				load_what <= `WORD_312;
+				pc <= pc;
 				state <= LOAD_MAC1;
 			end
 		`MVP:
 			begin
 				Rt <= 4'd3;
 				radr <= x;
-				res <= x - 32'd1;
+				res <= x_dec;
 				load_what <= `WORD_312;
+				pc <= pc;
 				state <= LOAD_MAC1;
 			end
 		`STS:
@@ -801,14 +842,16 @@ task decode_tsk;
 				radr <= y;
 				wadr <= y;
 				store_what <= `STW_X;
-				acc <= acc - 32'd1;
+				acc <= acc_dec;
+				pc <= pc;
 				state <= STORE1;
 			end
 		`CMPS:
 			begin
 				Rt <= 4'd3;
 				radr <= x;
-				res <= x + 32'd1;
+				res <= x_inc;
+				pc <= pc;
 				load_what <= `WORD_313;
 				state <= LOAD_MAC1;
 			end

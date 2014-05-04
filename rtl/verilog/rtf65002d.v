@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 // ============================================================================
 //        __
-//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//   \\__/ o\    (C) 2013, 2014  Robert Finch, Stratford
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@opencores.org
 //       ||
@@ -62,6 +62,10 @@ parameter ICACHE1 = 6'd31;
 parameter IBUF1 = 6'd32;
 parameter DCACHE1 = 6'd33;
 parameter CMPS1 = 6'd34;
+parameter HALF_CALC = 6'd35;
+parameter MVN816 = 6'd36;
+
+parameter SPIN_CYCLES = 8'd30;
 
 input rst_md;		// reset mode, 1=emulation mode, 0=native mode
 input rst_i;
@@ -101,32 +105,53 @@ reg em1;
 reg gie;	// global interrupt enable (set when sp is loaded)
 reg hwi;	// hardware interrupt indicator
 reg nmoi;	// native mode on interrupt
-wire [31:0] sr = {nf,vf,em,tf,23'b0,bf,df,im,zf,cf};
-wire [7:0] sr8 = {nf,vf,1'b0,bf,df,im,zf,cf};
+wire [31:0] sr = {nf,vf,em,tf,17'b0,m816,m_bit,x_bit,3'b0,bf,df,im,zf,cf};
+reg m_bit;	// acc/mem is 16 bit
+reg x_bit;	// index regs are 16 bit
+reg m816;	// 816 mode
+wire m16 = m816 & ~m_bit;
+wire xb16 = m816 & ~x_bit;
+wire [7:0] sr8 = m816 ? {nf,vf,m_bit,x_bit,df,im,zf,cf} : {nf,vf,1'b0,bf,df,im,zf,cf};
 reg nmi1,nmi_edge;
 reg wai;
+reg spi;		// spinlock interrupt
+reg [7:0] spi_cnt;
 reg wrrf;		// write register file
 reg [31:0] acc;
 reg [31:0] x;
 reg [31:0] y;
-reg [7:0] sp;
+reg [15:0] sp;
+reg [15:0] dpr;		// direct page register
+reg [7:0] dbr;		// data bank register
 reg [31:0] spage;	// stack page
 wire [7:0] acc8 = acc[7:0];
 wire [7:0] x8 = x[7:0];
 wire [7:0] y8 = y[7:0];
+wire [15:0] acc16 = acc[15:0];
+wire [15:0] x16 = x[15:0];
+wire [15:0] y16 = y[15:0];
+wire [31:0] x_dec = x - 32'd1;
+wire [31:0] x_inc = x + 32'd1;
+wire [31:0] y_dec = y - 32'd1;
+wire [31:0] y_inc = y + 32'd1;
+wire [31:0] acc_dec = acc - 32'd1;
+wire [31:0] acc_inc = acc + 32'd1;
 reg [31:0] isp;		// interrupt stack pointer
 reg [31:0] oisp;	// original isp for bus retry
 wire [63:0] prod;
+reg [15:0] tmp16;
 wire [31:0] q,r;
 reg [31:0] tick;
-wire [7:0] sp_dec = sp - 8'd1;
-wire [7:0] sp_inc = sp + 8'd1;
+wire [15:0] sp_dec = sp - 16'd1;
+wire [15:0] sp_inc = sp + 16'd1;
+wire [15:0] sp_dec2 = sp - 16'd2;
 wire [31:0] isp_dec = isp - 32'd1;
 wire [31:0] isp_inc = isp + 32'd1;
 reg [3:0] suppress_pcinc;
 reg [31:0] pc;
 reg [31:0] opc;
 wire [3:0] pc_inc;
+reg [3:0] pc_inc2;
 wire [3:0] pc_inc8;
 wire [31:0] pcp2 = pc + (32'd2 & suppress_pcinc);	// for branches
 wire [31:0] pcp4 = pc + (32'd4 & suppress_pcinc);	// for branches
@@ -162,6 +187,7 @@ endcase
 reg [3:0] Rt;
 reg [33:0] ea;
 reg first_ifetch;
+reg [5:0] ic_whence;
 reg [31:0] lfsr;
 wire lfsr_fb; 
 xnor(lfsr_fb,lfsr[0],lfsr[1],lfsr[21],lfsr[31]);
@@ -173,15 +199,20 @@ wire eq = a==b;
 wire ltu = a < b;
 
 reg [7:0] b8;
+reg [15:0] b16;
 wire [32:0] alu_out;
 reg [32:0] res;
+reg [16:0] res16;
 reg [8:0] res8;
-wire resv8,resv32;
+wire resv8,resv16,resv32;
 wire resc8 = res8[8];
+wire resc16 = res16[16];
 wire resc32 = res[32];
-wire resz8 = res8[7:0]==8'h00;
-wire resz32 = res[31:0]==32'd0;
+wire resz8 = ~|res8[7:0];
+wire resz16 = ~|res16[15:0];
+wire resz32 = ~|res[31:0];
 wire resn8 = res8[7];
+wire resn16 = res16[15];
 wire resn32 = res[31];
 
 reg [33:0] vect;
@@ -244,6 +275,7 @@ reg hist_capture;
 
 reg isBusErr;
 reg isBrk,isMove,isSts;
+reg isMove816;
 reg isRTI,isRTL,isRTS;
 reg isOrb,isStb;
 reg isRMW;
@@ -312,6 +344,8 @@ wire isAtni = 1'b0;
 wire md_done;
 wire clk;
 reg isIY;
+reg isIY24;
+reg isI24;
 
 rtf65002_pcinc upci1
 (
@@ -324,7 +358,9 @@ rtf65002_pcinc8 upci2
 (
 	.opcode(ir[7:0]),
 	.suppress_pcinc(suppress_pcinc),
-	.inc(pc_inc8)
+	.inc(pc_inc8),
+	.m16(m16),
+	.xb16(xb16)
 );
 	
 mult_div umd1
@@ -479,17 +515,18 @@ overflow uovr2 (
 	.v(resv8)
 );
 
-wire [7:0] bcaio;
-wire [7:0] bcao;
-wire [7:0] bcsio;
-wire [7:0] bcso;
+wire [15:0] bcaio;
+wire [15:0] bcao;
+wire [15:0] bcsio;
+wire [15:0] bcso;
 wire bcaico,bcaco,bcsico,bcsco;
+wire bcaico8,bcaco8,bcsico8,bcsco8;
 
 `ifdef SUPPORT_BCD
-BCDAdd ubcdai1 (.ci(cf),.a(acc8),.b(ir[15:8]),.o(bcaio),.c(bcaico));
-BCDAdd ubcda2 (.ci(cf),.a(acc8),.b(b8),.o(bcao),.c(bcaco));
-BCDSub ubcdsi1 (.ci(cf),.a(acc8),.b(ir[15:8]),.o(bcsio),.c(bcsico));
-BCDSub ubcds2 (.ci(cf),.a(acc8),.b(b8),.o(bcso),.c(bcsco));
+BCDAdd4 ubcdai1 (.ci(cf),.a(acc16),.b(ir[23:8]),.o(bcaio),.c(bcaico),.c8(bcaico8));
+BCDAdd4 ubcda2 (.ci(cf),.a(acc16),.b(b8),.o(bcao),.c(bcaco),.c8(bcaco8));
+BCDSub4 ubcdsi1 (.ci(cf),.a(acc16),.b(ir[23:8]),.o(bcsio),.c(bcsico),.c8(bcsico8));
+BCDSub4 ubcds2 (.ci(cf),.a(acc16),.b(b8),.o(bcso),.c(bcsco),.c8(bcsco8));
 `endif
 
 reg [7:0] dati;
@@ -535,17 +572,23 @@ case(ir9)
 default:	takb <= 1'b0;
 endcase
 
-wire [31:0] iapy8 			= ia + y8;	// Don't add in abs8, already included with ia
-wire [31:0] zp_address 		= {abs8[31:16],8'h00,ir[15:8]};
-wire [31:0] zpx_address 	= {abs8[31:16],8'h00,ir[15:8]} + x8;
-wire [31:0] zpy_address	 	= {abs8[31:16],8'h00,ir[15:8]} + y8;
-wire [31:0] abs_address 	= {abs8[31:16],ir[23:8]};
-wire [31:0] absx_address 	= {abs8[31:16],ir[23:8] + {8'h0,x8}};	// simulates 64k bank wrap-around
-wire [31:0] absy_address 	= {abs8[31:16],ir[23:8] + {8'h0,y8}};
+wire [31:0] mvnsrc_address	= {abs8[31:24],ir[23:16],x16};
+wire [31:0] mvndst_address	= {abs8[31:24],ir[15: 8],y16};
+wire [31:0] iapy8 			= ia + y16;		// Don't add in abs8, already included with ia
+wire [31:0] zp_address 		= {abs8[31:16],8'h00,ir[15:8]} + dpr;
+wire [31:0] zpx_address 	= {abs8[31:16],{8'h00,ir[15:8]} + x16} + dpr;
+wire [31:0] zpy_address	 	= {abs8[31:16],{8'h00,ir[15:8]} + y16} + dpr;
+wire [31:0] abs_address 	= {abs8[31:24],dbr,ir[23:8]};
+wire [31:0] absx_address 	= {abs8[31:24],dbr,ir[23:8] + x16};	// simulates 64k bank wrap-around
+wire [31:0] absy_address 	= {abs8[31:24],dbr,ir[23:8] + y16};
+wire [31:0] al_address		= {abs8[31:24],ir[31:8]};
+wire [31:0] alx_address		= {abs8[31:24],ir[31:8] + x16};
 wire [31:0] zpx32xy_address 	= ir[23:12] + rfoa;
 wire [31:0] absx32xy_address 	= ir[47:16] + rfob;
 wire [31:0] zpx32_address 		= ir[31:20] + rfob;
 wire [31:0] absx32_address 		= ir[55:24] + rfob;
+
+wire [31:0] dsp_address = m816 ? {abs8[31:24],8'h00,sp + ir[15:8]} : {abs8[31:16],8'h01,sp[7:0]+ir[15:8]};
 
 rtf65002_alu ualu1
 (
@@ -619,6 +662,8 @@ if (rst_i) begin
 	dat_o <= 32'd0;
 	nmi_edge <= 1'b0;
 	wai <= 1'b0;
+	spi <= 1'b0;
+	spi_cnt <= SPIN_CYCLES;
 	cf <= 1'b0;
 	ir <= 64'hEAEAEAEAEAEAEAEA;
 	imiss <= `FALSE;
@@ -628,6 +673,9 @@ if (rst_i) begin
 	write_allocate <= 1'b0;
 	nmoi <= 1'b1;
 	state <= RESET1;
+	m816 <= 1'b0;
+	m_bit <= 1'b1;
+	x_bit <= 1'b1;
 	if (rst_md) begin
 		pc <= 32'h0000FFF0;		// set high-order pc to zero
 		vect <= `BYTE_RST_VECT;
@@ -640,6 +688,8 @@ if (rst_i) begin
 	end
 	suppress_pcinc <= 4'hF;
 	exbuf <= 64'd0;
+	dbr <= 8'h00;
+	dpr <= 16'h0000;
 	spage <= 32'h00000100;
 	bufadr <= 32'd0;
 	abs8 <= 32'd0;
@@ -648,6 +698,8 @@ if (rst_i) begin
 	gie <= 1'b0;
 	tick <= 32'd0;
 	isIY <= 1'b0;
+	isIY24 <= 1'b0;
+	isI24 <= `FALSE;
 	load_what <= `NOTHING;
 `ifdef DEBUG
 	hist_capture <= `TRUE;
@@ -691,6 +743,9 @@ RESET2:
 `include "byte_ifetch.v"
 `include "byte_decode.v"
 `include "byte_calc.v"
+`ifdef SUPPORT_816
+`include "half_calc.v"
+`endif
 `endif
 
 `include "load_mac.v"
@@ -744,7 +799,7 @@ BUS_ERROR:
 		vect <= {vbr[31:9],intno,2'b00};
 		hwi <= `TRUE;
 		isBusErr <= `TRUE;
-		state <= STORE1;
+		next_state(STORE1);
 	end
 `endif
 
@@ -770,6 +825,7 @@ end
 `include "calc.v"
 `include "load_tsk.v"
 `include "wb_task.v"
+`include "misc_task.v"
 
 task next_state;
 input [5:0] nxt;
@@ -814,6 +870,7 @@ ICACHE1:		fnStateName = "ICACHE1    ";
 IBUF1:			fnStateName = "IBUF1      ";
 DCACHE1:		fnStateName = "DCACHE1    ";
 CMPS1:			fnStateName = "CMPS1      ";
+HALF_CALC:		fnStateName = "HALF_CALC  ";
 default:		fnStateName = "UNKNOWN    ";
 endcase
 endfunction

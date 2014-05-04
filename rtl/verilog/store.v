@@ -1,6 +1,6 @@
 // ============================================================================
 //        __
-//   \\__/ o\    (C) 2013  Robert Finch, Stratford
+//   \\__/ o\    (C) 2013,2014  Robert Finch, Stratford
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@opencores.org
 //       ||
@@ -19,7 +19,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
 //                                                            
 // Memory store states
-// The store states work for either eight bit or 32 bit mode              
+// The store states work for 8, 16 or 32 bit mode              
 // ============================================================================
 //
 // Stores always write through to memory, then optionally update the cache if
@@ -50,7 +50,26 @@ STORE1:
 		`STW_PC158:		wb_write(1,{4{pc[15:8]}});
 		`STW_PC70:		wb_write(1,{4{pc[7:0]}});
 		`STW_SR70:		wb_write(1,{4{sr8}});
-		`STW_DEF8:		wb_write(1,wdat);
+		`STW_DEF8:		wb_write(1,{4{wdat[7:0]}});
+`endif
+`ifdef SUPPORT_816
+		`STW_DEF70:		begin wb_write(1,{4{wdat[7:0]}}); lock_o <= 1'b1; end
+		`STW_DEF158:	wb_write(1,{4{wdat[15:8]}});
+		`STW_ACC70:		begin wb_write(1,{4{acc[7:0]}}); lock_o <= 1'b1; end
+		`STW_ACC158:	wb_write(1,{4{acc[15:8]}});
+		`STW_X70:		begin wb_write(1,{4{x[7:0]}}); lock_o <= 1'b1; end
+		`STW_X158:		wb_write(1,{4{x[15:8]}});
+		`STW_Y70:		begin wb_write(1,{4{y[7:0]}}); lock_o <= 1'b1; end
+		`STW_Y158:		wb_write(1,{4{y[15:8]}});
+		`STW_Z70:		begin wb_write(1,{4{8'h00}}); lock_o <= 1'b1; end
+		`STW_Z158:		wb_write(1,{4{8'h00}});
+		`STW_DBR:		wb_write(1,{4{dbr}});
+		`STW_DPR158:	begin wb_write(1,{4{dpr[15:8]}}); lock_o <= 1'b1; end
+		`STW_DPR70:		wb_write(1,{4{dpr[7:0]}});
+		`STW_TMP158:	begin wb_write(1,{4{tmp16[15:8]}}); lock_o <= 1'b1; end
+		`STW_TMP70:		wb_write(1,{4{tmp16[7:0]}});
+		`STW_IA158:		begin wb_write(1,{4{ia[15:8]}}); lock_o <= 1'b1; end
+		`STW_IA70:		wb_write(1,{4{ia[7:0]}});
 `endif
 		default:	wb_write(0,wdat);
 		endcase
@@ -74,15 +93,21 @@ STORE2:
 		state <= DECODE;
 	end
 	else if (ack_i) begin
-		wdat <= dat_o;
-		if (isMove|isSts) begin
+//		wdat <= dat_o;
+		if (!em && (isMove|isSts)) begin
 			state <= MVN3;
 			retstate <= MVN3;
 		end
 		else begin
 			if (em) begin
-				state <= BYTE_IFETCH;
-				retstate <= BYTE_IFETCH;
+				if (isMove) begin
+					state <= MVN816;
+					retstate <= MVN816;
+				end
+				else begin
+					state <= BYTE_IFETCH;
+					retstate <= BYTE_IFETCH;
+				end
 			end
 			else begin
 				state <= IFETCH;
@@ -127,6 +152,79 @@ STORE2:
 				end
 				ir[11:8] <= ir[11:8] + 4'd1;
 			end
+`ifdef SUPPORT_816
+		`STW_DEF70:
+			begin
+				lock_o <= 1'b1;
+				wadr2LSB <= wadr2LSB + 2'b01;
+				if (wadr2LSB==2'b11)
+					wadr <= wadr + 32'd1;
+				store_what <= `STW_DEF158;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_ACC70:
+			begin
+				lock_o <= 1'b1;
+				wadr2LSB <= wadr2LSB + 2'b01;
+				if (wadr2LSB==2'b11)
+					wadr <= wadr + 32'd1;
+				store_what <= `STW_ACC158;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_X70:
+			begin
+				lock_o <= 1'b1;
+				wadr2LSB <= wadr2LSB + 2'b01;
+				if (wadr2LSB==2'b11)
+					wadr <= wadr + 32'd1;
+				store_what <= `STW_X158;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_Y70:
+			begin
+				lock_o <= 1'b1;
+				wadr2LSB <= wadr2LSB + 2'b01;
+				if (wadr2LSB==2'b11)
+					wadr <= wadr + 32'd1;
+				store_what <= `STW_Y158;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_Z70:
+			begin
+				lock_o <= 1'b1;
+				wadr2LSB <= wadr2LSB + 2'b01;
+				if (wadr2LSB==2'b11)
+					wadr <= wadr + 32'd1;
+				store_what <= `STW_Z158;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_DPR158:
+			begin
+				set_sp();
+				store_what <= `STW_DPR70;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_TMP158:
+			begin
+				set_sp();
+				store_what <= `STW_TMP70;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+		`STW_IA158:
+			begin
+				set_sp();
+				store_what <= `STW_IA70;
+				retstate <= STORE1;
+				state <= STORE1;
+			end
+`endif
 `ifdef SUPPORT_EM8
 		`STW_PC3124:
 			begin
@@ -141,22 +239,16 @@ STORE2:
 			end
 		`STW_PC2316:
 			begin
-				radr <= {spage[31:8],sp[7:2]};
-				wadr <= {spage[31:8],sp[7:2]};
-				radr2LSB <= sp[1:0];
-				wadr2LSB <= sp[1:0];
-				sp <= sp_dec;
-				store_what <= `STW_PC158;
-				retstate <= STORE1;
-				state <= STORE1;
+				if (ir9 != `PHK) begin
+					set_sp();
+					store_what <= `STW_PC158;
+					retstate <= STORE1;
+					state <= STORE1;
+				end
 			end
 		`STW_PC158:
 			begin
-				radr <= {spage[31:8],sp[7:2]};
-				wadr <= {spage[31:8],sp[7:2]};
-				radr2LSB <= sp[1:0];
-				wadr2LSB <= sp[1:0];
-				sp <= sp_dec;
+				set_sp();
 				store_what <= `STW_PC70;
 				retstate <= STORE1;
 				state <= STORE1;
@@ -164,12 +256,9 @@ STORE2:
 		`STW_PC70:
 			begin
 				case({1'b0,ir[7:0]})
-				`BRK: 	begin
-						radr <= {spage[31:8],sp[7:2]};
-						wadr <= {spage[31:8],sp[7:2]};
-						radr2LSB <= sp[1:0];
-						wadr2LSB <= sp[1:0];
-						sp <= sp_dec;
+				`BRK,`COP:
+						begin
+						set_sp();
 						store_what <= `STW_SR70;
 						retstate <= STORE1;
 						state <= STORE1;
@@ -178,7 +267,7 @@ STORE2:
 						pc[15:0] <= ir[23:8];
 						end
 				`JSL: 	begin
-						pc <= ir[39:8];
+						pc[23:0] <= ir[31:8];
 						end
 				`JSR_INDX:
 						begin
@@ -200,6 +289,15 @@ STORE2:
 					radr <= vect[33:2];
 					radr2LSB <= vect[1:0];
 					im <= hwi;
+				end
+				else if (ir[7:0]==`COP) begin
+					load_what <= `PC_70;
+					state <= LOAD_MAC1;
+					retstate <= LOAD_MAC1;
+					pc[31:16] <= abs8[31:16];
+					radr <= vect[33:2];
+					radr2LSB <= vect[1:0];
+					im <= 1'b1;
 				end
 			end
 `endif

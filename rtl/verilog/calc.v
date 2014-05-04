@@ -38,6 +38,15 @@ task calc_tsk;
 		`INC_ZPX,`INC_ABS,`INC_ABSX,
 		`DEC_ZPX,`DEC_ABS,`DEC_ABSX:
 				state <= STORE1;
+		`SPL_ABS,`SPL_ABSX:
+			if (b==32'd0) begin
+				pc <= pc - pc_inc2 - 32'd1;
+				spi_cnt <= spi_cnt - 8'd1;
+				if (spi_cnt==8'd0)
+					spi <= 1'b1;
+			end
+			else
+				spi_cnt <= SPIN_CYCLES;
 		endcase
 	end
 endtask

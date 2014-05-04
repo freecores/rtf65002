@@ -75,7 +75,7 @@ ICACHE1:
 		state <= LOAD_ICACHE;
 	end
 	else
-		state <= em ? BYTE_IFETCH : IFETCH;
+		state <= ic_whence;	// return to where we came from
 LOAD_ICACHE:
 	if (ack_i) begin
 		if (adr_o[3:2]==2'b10)
@@ -128,7 +128,7 @@ LOAD_IBUF1:
 	end
 LOAD_IBUF2:
 	if (ack_i|err_i) begin
-		state <= em ? BYTE_IFETCH : LOAD_IBUF3;
+		state <= ic_whence==BYTE_IFETCH ? BYTE_IFETCH : LOAD_IBUF3;
 		case(pc[1:0])
 		2'd0:	ibuf[55:32] <= dat_i[23:0];
 		2'd1:	ibuf[55:24] <= dat_i;
